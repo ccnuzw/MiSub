@@ -12,6 +12,7 @@ import ServiceSettings from '../components/settings/sections/ServiceSettings.vue
 import ProcessingSettings from '../components/settings/sections/ProcessingSettings.vue';
 import WebSettings from '../components/settings/sections/WebSettings.vue';
 import SystemSettings from '../components/settings/sections/SystemSettings.vue';
+import CoreServiceSettings from '../components/settings/sections/CoreServiceSettings.vue';
 
 const dataStore = useDataStore();
 const { showToast } = useToastStore();
@@ -62,6 +63,7 @@ const currentTabLabel = computed(() => {
         case 'pipeline': return '节点处理';
         case 'web': return 'Web访问';
         case 'system': return '系统设置';
+        case 'cmedt': return 'CMEDT';
         default: return '设置';
     }
 });
@@ -240,6 +242,7 @@ onMounted(() => {
                 <ProcessingSettings v-show="activeTab === 'pipeline'" :settings="settings" :prefixConfig="prefixConfig" v-model:nodeTransform="nodeTransform" />
                 <WebSettings v-show="activeTab === 'web'" :disguiseConfig="disguiseConfig" />
                 <SystemSettings v-show="activeTab === 'system'" :settings="settings" :exportBackup="exportBackup" :importBackup="importBackup" @migrate="handleOpenMigrationModal" />
+                <CoreServiceSettings v-show="activeTab === 'cmedt'" :settings="settings" />
             </div>
 
             <!-- Footer Actions -->

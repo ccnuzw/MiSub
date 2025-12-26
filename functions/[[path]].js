@@ -22,15 +22,19 @@
 import { handleMisubRequest } from './modules/subscription-handler.js';
 import { handleApiRequest } from './modules/api-router.js';
 import { createJsonResponse } from './modules/utils.js';
+import { handleCoreServiceRequest } from './modules/core-service.js';
 
-/**
- * 主要的请求处理函数
- * @param {Object} context - Cloudflare上下文对象
- * @returns {Promise<Response>} HTTP响应
- */
 export async function onRequest(context) {
     const { request, env, next } = context;
     const url = new URL(request.url);
+
+    // [New] CMEDT Core Service Handling
+    // Intercepts Traffic for VLESS/Trojan or Camouflage
+    const coreResponse = await handleCoreServiceRequest(context);
+    if (coreResponse) {
+        return coreResponse;
+    }
+    // If handleCoreServiceRequest returns null/undefined, proceed to standard MiSub logic
 
     try {
         // 路由分发
