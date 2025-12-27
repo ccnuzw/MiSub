@@ -111,7 +111,7 @@ const copyLink = async () => {
       <div>
         <h3 class="text-lg font-medium text-gray-900 dark:text-white">SSKB 配置</h3>
         <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          启用内置的 SSKB VLESS 代理服务
+          启用 SSKB 核心服务组件
         </p>
       </div>
       <div>
@@ -159,7 +159,7 @@ const copyLink = async () => {
 
         <!-- Path -->
         <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Websocket Path</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">资源路径</label>
             <input 
                 v-model="config.path"
                 type="text" 
@@ -170,20 +170,20 @@ const copyLink = async () => {
 
         <!-- ProxyIP -->
         <div class="md:col-span-2">
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">ProxyIP (落地IP/域名)</label>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">加速节点</label>
             <input 
                 v-model="config.proxyIp"
                 type="text" 
                 class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-white"
                 placeholder="例如: kr.william.us.ci"
             >
-            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">访问受限网站时的落地代理</p>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">设置服务通讯的目标地址</p>
         </div>
       </div>
 
       <!-- Link Generator -->
       <div v-if="config.uuid" class="mt-6 border-t border-gray-200 dark:border-gray-600 pt-4">
-        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">节点分享链接</label>
+        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">配置分享链接</label>
         <div class="relative rounded-md shadow-sm">
             <textarea 
                 :value="vlessLink" 
@@ -205,8 +205,8 @@ const copyLink = async () => {
             </div>
         </div>
         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            支持 VLESS + WebSocket + TLS 模式。
-            <span v-if="!isSecure" class="text-amber-500">注意: 当前页面非 HTTPS，生成的链接默认不开启 TLS (port 80)，需在 HTTPS 环境下使用以获得最佳安全性。</span>
+            配置链接已生成。
+            <span v-if="!isSecure" class="text-amber-500">注意: 当前连接非加密状态，建议在安全网络环境下使用。</span>
         </p>
       </div>
 
