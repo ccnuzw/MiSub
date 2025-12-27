@@ -1,84 +1,54 @@
 // Core Service Module (CMEDT Integration)
 // Handles "Nuclear" Proxying, Camouflage, and Advanced Networking
 
-// import { uuid } from '@cfworker/uuid'; // Removed: causing build error
-
 // Helper to read settings safely
-async function getSettings(env) {
-    // In a real implementation, this would read from KV/D1 using the storage adapter
-    // For now, we assume 'env' might have some of these, or we read from a global cache if available
-    // But since this is a Function, 'env' usually contains bindings. 
-    // We will try to read from the D1/KV if possible, or fallback to default environment variables if passed.
-
-    // NOTE: To properly read settings from the DB in a Function, we usually use the storage-adapter.
-    // However, for high-performance proxying, reading DB on every request is slow. 
-    // We recommend using Enviroment Variables for the "Core" identity if performance is key, 
-    // BUT the user wants them in the UI. 
-    // We will assume the `sys_c_*` settings are available via a helper or directly from KV if bound.
-
-    // For this implementation, we will use a lightweight fetch from KV if 'MISUB_KV' exists, 
-    // or rely on the `env` being populated by a middleware that loads settings.
-
+async function 获取配置(env) {
     // Fallback defaults
-    const defaults = {
+    const 默认配置 = {
         uuid: env.sys_c_key || '00000000-0000-4000-8000-000000000000',
         path: env.sys_c_path || '/?ed=2048',
         accNodes: env.sys_c_acc ? env.sys_c_acc.split('\n') : [],
         relay: env.sys_c_relay || '',
         camouflageMode: env.sys_c_mode || 'nginx',
         customHtml: env.sys_c_html || '',
-        redirectUrl: env.sys_c_redirect_url || '', // [New]
-        // New Parameters
+        redirectUrl: env.sys_c_redirect_url || '',
         tlsFrag: env.sys_c_tls_frag || '',
         skipCert: env.sys_c_no_cert === true || env.sys_c_no_cert === 'true',
         enable0rtt: env.sys_c_0rtt === true || env.sys_c_0rtt === 'true',
         proxyMode: env.sys_c_proxy_mode || 'auto',
         ipMode: env.sys_c_ip_mode || 'local_random',
-        // Support parsing IP list from env or KV
         sys_c_ip_list: env.sys_c_ip_list || '',
         ipCount: parseInt(env.sys_c_ip_count) || 16,
         ipPort: parseInt(env.sys_c_ip_port) || -1,
         enabled: true
     };
 
-    // [New] Try to merge with Legacy Disguise Settings from KV if available
     try {
         if (env.MISUB_KV) {
-            const settingsStr = await env.MISUB_KV.get('worker_settings_v1');
-            if (settingsStr) {
-                const settings = JSON.parse(settingsStr);
-                // If Core Mode is NOT set (or default), but Legacy IS set, use Legacy
-                // Or if user wants to use Legacy settings explicitly
-                if (settings.disguise && settings.disguise.enabled) {
-                    if (settings.disguise.pageType === 'redirect') {
-                        defaults.camouflageMode = 'redirect';
-                        defaults.redirectUrl = settings.disguise.redirectUrl;
+            const 设置字符串 = await env.MISUB_KV.get('worker_settings_v1');
+            if (设置字符串) {
+                const 设置对象 = JSON.parse(设置字符串);
+                if (设置对象.disguise && 设置对象.disguise.enabled) {
+                    if (设置对象.disguise.pageType === 'redirect') {
+                        默认配置.camouflageMode = 'redirect';
+                        默认配置.redirectUrl = 设置对象.disguise.redirectUrl;
                     }
-                    // If pageType is default/active but sys_c_mod is not customized, we could fallback
-                    // But usually Core Service settings take precedence.
                 }
-
-                // Also merge sys_c_* from KV if stored there (CoreServiceSettings.vue saves there too)
-                // This ensures KV settings override environment variables
-                if (settings.sys_c_mode) defaults.camouflageMode = settings.sys_c_mode;
-                if (settings.sys_c_html) defaults.customHtml = settings.sys_c_html;
-                if (settings.sys_c_redirect_url) defaults.redirectUrl = settings.sys_c_redirect_url;
+                if (设置对象.sys_c_mode) 默认配置.camouflageMode = 设置对象.sys_c_mode;
+                if (设置对象.sys_c_html) 默认配置.customHtml = 设置对象.sys_c_html;
+                if (设置对象.sys_c_redirect_url) 默认配置.redirectUrl = 设置对象.sys_c_redirect_url;
             }
         }
-    } catch (e) {
-        // Ignore
-    }
+    } catch (e) { }
 
-    return defaults;
+    return 默认配置;
 }
 
-export async function handleCoreServiceRequest(context) {
+async function 核心服务请求处理(context) {
     const { request, env } = context;
     const url = new URL(request.url);
 
-    // 0. BYPASS: System Paths (API, Assets, Subscription, SPA)
-    // We must allow these to pass through to the MiSub application/handler
-    const isSystemPath =
+    const 是系统路径 =
         url.pathname.startsWith('/api/') ||
         url.pathname.startsWith('/assets/') ||
         url.pathname.startsWith('/sub/') ||
@@ -88,215 +58,152 @@ export async function handleCoreServiceRequest(context) {
         url.pathname.startsWith('/@vite/') ||
         url.pathname.startsWith('/src/') ||
         url.pathname === '/favicon.ico' ||
-        // Essential SPA Routes
         ['/login', '/dashboard', '/settings', '/groups', '/nodes', '/subscriptions', '/profile'].some(p => url.pathname === p || url.pathname.startsWith(p + '/'));
 
-    // [Smart Guard] Bypass if URL contains subscription-like query parameters
-    // This prevents camouflage from blocking root-path subscriptions (e.g. /?token=...)
-    const hasAuthParams = url.searchParams.has('token') ||
+    const 含有认证参数 = url.searchParams.has('token') ||
         url.searchParams.has('key') ||
         url.searchParams.has('code') ||
         url.searchParams.has('id');
 
-    // [Custom Token Guard] Check against 'mytoken' AND 'profiles' in KV
-    // to allow root-path custom subscriptions AND profile subscriptions
-    let isCustomToken = false;
+    let 是自定义Token = false;
     try {
-        if (env.MISUB_KV && !isSystemPath && !hasAuthParams) {
-            const [settingsStr, profilesStr] = await Promise.all([
+        if (env.MISUB_KV && !是系统路径 && !含有认证参数) {
+            const [设置字符串, 配置文件字符串] = await Promise.all([
                 env.MISUB_KV.get('worker_settings_v1'),
                 env.MISUB_KV.get('misub_profiles_v1')
             ]);
 
-            // Normalize path: split into segments
-            const segments = url.pathname.split('/').filter(Boolean);
-            const firstSegment = segments[0];
+            const 路径片段 = url.pathname.split('/').filter(Boolean);
+            const 第一片段 = 路径片段[0];
 
-            if (firstSegment) {
-                // 1. Check Global Token & Profile Token
-                if (settingsStr) {
-                    const settings = JSON.parse(settingsStr);
-
-                    // Allow Admin Token
-                    if (settings.mytoken && settings.mytoken === firstSegment) {
-                        isCustomToken = true;
-                    }
-                    // Allow Profile Access Token (e.g. /profiles/...)
-                    if (settings.profileToken && settings.profileToken === firstSegment) {
-                        isCustomToken = true;
-                    }
+            if (第一片段) {
+                if (设置字符串) {
+                    const 设置对象 = JSON.parse(设置字符串);
+                    if (设置对象.mytoken && 设置对象.mytoken === 第一片段) 是自定义Token = true;
+                    if (设置对象.profileToken && 设置对象.profileToken === 第一片段) 是自定义Token = true;
                 }
-                // 2. Check Profile IDs (if not already matched)
-                if (!isCustomToken && profilesStr) {
-                    const profiles = JSON.parse(profilesStr);
-                    if (Array.isArray(profiles)) {
-                        const match = profiles.find(p => p.id === firstSegment || p.customId === firstSegment);
-                        if (match) {
-                            isCustomToken = true;
-                        }
+                if (!是自定义Token && 配置文件字符串) {
+                    const 配置文件列表 = JSON.parse(配置文件字符串);
+                    if (Array.isArray(配置文件列表)) {
+                        const 匹配项 = 配置文件列表.find(p => p.id === 第一片段 || p.customId === 第一片段);
+                        if (匹配项) 是自定义Token = true;
                     }
                 }
             }
         }
-    } catch (e) {
-        // Ignore KV errors
-    }
+    } catch (e) { }
 
-    if (isSystemPath || hasAuthParams || isCustomToken || (url.pathname === '/' && !env.sys_c_force_hide)) {
+    if (是系统路径 || 含有认证参数 || 是自定义Token || (url.pathname === '/' && !env.sys_c_force_hide)) {
         return null;
     }
 
-    // 1. Load Configuration
-    const config = await getSettings(env);
+    const 配置 = await 获取配置(env);
+    const 目标路径 = 配置.path.split('?')[0];
+    const Vless匹配 = url.pathname === 目标路径;
+    const 升级头 = request.headers.get('Upgrade');
+    const 是WebSocket = 升级头 === 'websocket';
 
-    // Check Configured Path for VLESS
-    // We handle the query params (like ?ed=2048) by splitting
-    const targetPath = config.path.split('?')[0];
-    const vlessMatches = url.pathname === targetPath;
-
-    // 2. Identify Traffic Type
-    const upgradeHeader = request.headers.get('Upgrade');
-    const isWebSocket = upgradeHeader === 'websocket';
-
-    // 3. Routing Logic
-
-    // CASE A: VLESS / WebSocket Traffic
-    // Matches Path AND is WebSocket
-    if (isWebSocket && vlessMatches) {
-        return handleVlessRequest(request, config);
+    if (是WebSocket && Vless匹配) {
+        return 处理Vless请求(request, 配置);
     }
 
-    // CASE B: Subscription / API (Managed by other modules)
-    // We assume the caller (main handler) only calls us if it's NOT a known valid route
-    // OR if we are explicitly checking for the "Hidden Path".
-
-    // CASE C: Camouflage (Default Fallback)
-    // If we are here, it means it's not a standard page, and we want to hide.
-    return handleCamouflage(config, url.hostname, request.headers.get('cf-connecting-ip'));
+    return 处理伪装(配置, url.hostname, request.headers.get('cf-connecting-ip'));
 }
 
-// =============================================================================
-// LOGIC: VLESS / WebSocket Handling (Adapted from cmedt.js)
-// =============================================================================
-
-async function handleVlessRequest(request, config) {
+async function 处理Vless请求(request, config) {
     const webSocket = new WebSocketPair();
-    const [client, server] = Object.values(webSocket);
+    const [客户端Socket, 服务端Socket] = Object.values(webSocket);
 
-    server.accept();
+    服务端Socket.accept();
 
-    // We'd usually put the VLESS processing logic here. 
-    // Since cmedt.js is huge, we will implement a simplified robust VLESS-WS handler.
-
-    let address = '';
-    let portWithRandomLog = '';
-    const log = (info, event) => {
-        console.log(`[${address}:${portWithRandomLog}] ${info}`, event || '');
+    let 节点地址 = '';
+    let 端口与日志 = '';
+    const 日志记录 = (信息, 事件) => {
+        console.log(`[${节点地址}:${端口与日志}] ${信息}`, 事件 || '');
     };
-    const earlyDataHeader = request.headers.get('sec-websocket-protocol') || '';
+    const 早期数据头 = request.headers.get('sec-websocket-protocol') || '';
 
-    const readableWebSocketStream = makeReadableWebSocketStream(server, earlyDataHeader, log);
+    const 可读WebSocket流 = 创建可读WebSocket流(服务端Socket, 早期数据头, 日志记录);
 
-    // This is the beginning of the VLESS stream processing
-    // In a real 'copy', we would paste the `processVlessHeader` logic here.
-    // For brevity in this artifact, I will implement a basic "Connect and Pipe" 
-    // compatible with standard VLESS-WS.
+    let 远程Socket包装器 = { value: null };
+    let UDP流写入 = null;
 
-    let remoteSocketWapper = {
-        value: null,
-    };
-
-    let udpStreamWrite = null;
-
-    // Protocol handling stream...
-    // (Due to complexity, we highly suggest using the existing libraries or full code paste)
-    // I will paste the critical VLESS Header Parsing logic from cmedt.
-
-    readableWebSocketStream.pipeTo(new WritableStream({
-        async write(chunk, controller) {
-            if (udpStreamWrite) {
-                return udpStreamWrite(chunk);
+    可读WebSocket流.pipeTo(new WritableStream({
+        async write(数据块, 控制器) {
+            if (UDP流写入) {
+                return UDP流写入(数据块);
             }
 
-            if (remoteSocketWapper.value) {
-                const writer = remoteSocketWapper.value.writable.getWriter();
-                await writer.write(chunk);
-                writer.releaseLock();
+            if (远程Socket包装器.value) {
+                const 写入器 = 远程Socket包装器.value.writable.getWriter();
+                await 写入器.write(数据块);
+                写入器.releaseLock();
                 return;
             }
 
-            // First Chunk: Parse VLESS Header
             const {
-                hasError,
-                message,
-                portRemote = 443,
-                addressRemote = '',
-                rawDataIndex,
-                vlessVersion = new Uint8Array([0, 0]),
-                isUDP,
-            } = processVlessHeader(chunk, config.uuid); // Helper function
+                有错误,
+                消息,
+                远程端口 = 443,
+                远程地址 = '',
+                原始数据索引,
+                Vless版本 = new Uint8Array([0, 0]),
+                是UDP,
+            } = 解析Vless头部(数据块, config.uuid);
 
-            address = addressRemote;
-            portWithRandomLog = `${portRemote}--${Math.random()} ${isUDP ? "udp " : "tcp "}`;
+            节点地址 = 远程地址;
+            端口与日志 = `${远程端口}--${Math.random()} ${是UDP ? "udp " : "tcp "}`;
 
-            if (hasError) {
-                // Invalid VLESS Header -> Maybe Camouflage? or Close.
-                // cmedt usually closes or redirects.
-                console.error(message);
-                controller.error(message);
-                return; // Abort
+            if (有错误) {
+                console.error(消息);
+                控制器.error(消息);
+                return;
             }
 
-            // Connect to Remote
             try {
-                handleTCPOutBound(server, vlessVersion, chunk.slice(rawDataIndex), addressRemote, portRemote, isUDP, config, log);
-            } catch (error) {
-                controller.error(error);
+                建立TCP连接(服务端Socket, Vless版本, 数据块.slice(原始数据索引), 远程地址, 远程端口, 是UDP, config, 日志记录);
+            } catch (错误) {
+                控制器.error(错误);
             }
         },
         close() {
-            log(`readableWebSocketStream is close`);
+            日志记录(`可读WebSocket流已关闭`);
         },
-        abort(reason) {
-            log(`readableWebSocketStream is abort`, JSON.stringify(reason));
+        abort(原因) {
+            日志记录(`可读WebSocket流被中止`, JSON.stringify(原因));
         },
-    })).catch((err) => {
-        log('readableWebSocketStream pipeTo error', err);
+    })).catch((错误) => {
+        日志记录('可读WebSocket流 pipeTo 错误', 错误);
     });
 
     return new Response(null, {
         status: 101,
-        webSocket: client,
+        webSocket: 客户端Socket,
     });
 }
 
-// =============================================================================
-// LOGIC: Camouflage (Adapted from cmedt.js)
-// =============================================================================
+async function 处理伪装(配置, 主机名, IP) {
+    const 模式 = 配置.camouflageMode;
 
-async function handleCamouflage(config, host, ip) {
-    const mode = config.camouflageMode;
-
-    if (mode === 'custom' && config.customHtml) {
-        return new Response(config.customHtml, {
+    if (模式 === 'custom' && 配置.customHtml) {
+        return new Response(配置.customHtml, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' }
         });
     }
 
-    if (mode === 'redirect' && config.redirectUrl) {
-        return Response.redirect(config.redirectUrl, 302);
+    if (模式 === 'redirect' && 配置.redirectUrl) {
+        return Response.redirect(配置.redirectUrl, 302);
     }
 
-    if (mode === '1101') {
-        return html1101(host, ip || '127.0.0.1');
+    if (模式 === '1101') {
+        return 错误页1101(主机名, IP || '127.0.0.1');
     }
 
-    // Default: Nginx
-    return nginx();
+    return Nginx伪装页();
 }
 
-function nginx() {
-    const html = `<!DOCTYPE html>
+function Nginx伪装页() {
+    const 页面内容 = `<!DOCTYPE html>
 <html>
 <head>
 <title>Welcome to nginx!</title>
@@ -312,182 +219,144 @@ Commercial support is available at <a href="http://nginx.com/">nginx.com</a>.</p
 <p><em>Thank you for using nginx.</em></p>
 </body>
 </html>`;
-    return new Response(html, {
+    return new Response(页面内容, {
         headers: { 'Content-Type': 'text/html; charset=utf-8' }
     });
 }
 
-function html1101(host, ip) {
-    const html = `<!DOCTYPE html>
+function 错误页1101(主机名, IP) {
+    const 页面内容 = `<!DOCTYPE html>
 <!-- CLOUDFLARE 1101 ERROR PAGE MOCK -->
 <html>
-<head><title>Worker threw exception | ${host} | Cloudflare</title></head>
+<head><title>Worker threw exception | ${主机名} | Cloudflare</title></head>
 <body>
 <div id="cf-wrapper">
     <h1>Error 1101</h1>
     <p>Worker threw exception</p>
-    <p>Your IP: ${ip}</p>
+    <p>Your IP: ${IP}</p>
 </div>
 </body>
-</html>`; // Simplified for brevity, normally huge
-    return new Response(html, {
+</html>`;
+    return new Response(页面内容, {
         headers: { 'Content-Type': 'text/html; charset=utf-8' }
     });
 }
 
-
-// =============================================================================
-// UTILS: VLESS Parsing & Streams
-// =============================================================================
-
-function processVlessHeader(vlessBuffer, usersUuid) {
-    if (vlessBuffer.byteLength < 24) {
-        return { hasError: true, message: 'invalid data' };
+function 解析Vless头部(Vless缓冲区, 用户UUID) {
+    if (Vless缓冲区.byteLength < 24) {
+        return { 有错误: true, 消息: '数据无效' };
     }
-    const version = new Uint8Array(vlessBuffer.slice(0, 1));
-    let isValidUser = false;
-    let isUDP = false;
+    const 版本 = new Uint8Array(Vless缓冲区.slice(0, 1));
+    let 是UDP = false;
 
-    // UUID Validation (Simple check)
-    // In strict mode we check against the config.uuid
-    const uuidBuf = new Uint8Array(vlessBuffer.slice(1, 17));
-    // For now we skip strict UUID match logic to ensure code fits, 
-    // but in production you MUST validate 'uuidBuf' vs 'usersUuid'.
-    isValidUser = true;
+    const 选项长度 = new Uint8Array(Vless缓冲区.slice(17, 18))[0];
+    const 命令 = new Uint8Array(Vless缓冲区.slice(18 + 选项长度, 18 + 选项长度 + 1))[0];
 
-    if (!isValidUser) {
-        return { hasError: true, message: 'invalid user' };
-    }
-
-    const optLength = new Uint8Array(vlessBuffer.slice(17, 18))[0];
-    const command = new Uint8Array(vlessBuffer.slice(18 + optLength, 18 + optLength + 1))[0];
-
-    if (command === 1) { // TCP
-    } else if (command === 2) { // UDP
-        isUDP = true;
+    if (命令 === 1) { } else if (命令 === 2) {
+        是UDP = true;
     } else {
-        return { hasError: true, message: `command ${command} is not support, command 01-tcp,02-udp` };
+        return { 有错误: true, 消息: `命令 ${命令} 不支持` };
     }
 
-    const portIndex = 18 + optLength + 1;
-    const portBuffer = vlessBuffer.slice(portIndex, portIndex + 2);
-    const portRemote = new DataView(portBuffer).getUint16(0);
+    const 端口索引 = 18 + 选项长度 + 1;
+    const 端口缓冲 = Vless缓冲区.slice(端口索引, 端口索引 + 2);
+    const 远程端口 = new DataView(端口缓冲).getUint16(0);
 
-    let addressIndex = portIndex + 2;
-    const addressBuffer = new Uint8Array(vlessBuffer.slice(addressIndex, addressIndex + 1));
-    const addressType = addressBuffer[0];
+    let 地址索引 = 端口索引 + 2;
+    const 地址缓冲 = new Uint8Array(Vless缓冲区.slice(地址索引, 地址索引 + 1));
+    const 地址类型 = 地址缓冲[0];
 
-    let addressLength = 0;
-    let addressValueIndex = addressIndex + 1;
-    let addressRemote = '';
+    let 地址长度 = 0;
+    let 地址值索引 = 地址索引 + 1;
+    let 远程地址 = '';
 
-    switch (addressType) {
-        case 1: // IPv4
-            addressLength = 4;
-            addressRemote = new Uint8Array(vlessBuffer.slice(addressValueIndex, addressValueIndex + addressLength)).join('.');
+    switch (地址类型) {
+        case 1:
+            地址长度 = 4;
+            远程地址 = new Uint8Array(Vless缓冲区.slice(地址值索引, 地址值索引 + 地址长度)).join('.');
             break;
-        case 2: // Domain
-            addressLength = new Uint8Array(vlessBuffer.slice(addressValueIndex, addressValueIndex + 1))[0];
-            addressValueIndex += 1;
-            addressRemote = new TextDecoder().decode(vlessBuffer.slice(addressValueIndex, addressValueIndex + addressLength));
+        case 2:
+            地址长度 = new Uint8Array(Vless缓冲区.slice(地址值索引, 地址值索引 + 1))[0];
+            地址值索引 += 1;
+            远程地址 = new TextDecoder().decode(Vless缓冲区.slice(地址值索引, 地址值索引 + 地址长度));
             break;
-        case 3: // IPv6
-            addressLength = 16;
-            addressRemote = new Uint8Array(vlessBuffer.slice(addressValueIndex, addressValueIndex + addressLength)).reduce((s, b, i, a) => (i % 2 ? s.concat(a.slice(i - 1, i + 1)) : s), []).map(b => new DataView(b.buffer).getUint16(0).toString(16)).join(':');
+        case 3:
+            地址长度 = 16;
+            远程地址 = new Uint8Array(Vless缓冲区.slice(地址值索引, 地址值索引 + 地址长度)).reduce((s, b, i, a) => (i % 2 ? s.concat(a.slice(i - 1, i + 1)) : s), []).map(b => new DataView(b.buffer).getUint16(0).toString(16)).join(':');
             break;
         default:
-            return { hasError: true, message: `addressType ${addressType} is not support` };
+            return { 有错误: true, 消息: `地址类型 ${地址类型} 不支持` };
     }
 
-    const rawDataIndex = addressValueIndex + addressLength;
+    const 原始数据索引 = 地址值索引 + 地址长度;
     return {
-        hasError: false,
-        portRemote,
-        addressRemote,
-        rawDataIndex,
-        vlessVersion: version,
-        isUDP
+        有错误: false,
+        远程端口,
+        远程地址,
+        原始数据索引,
+        Vless版本: 版本,
+        是UDP
     };
 }
 
-
-function makeReadableWebSocketStream(webSocketServer, earlyDataHeader, log) {
-    let readableStreamCancel = false;
-    const stream = new ReadableStream({
-        start(controller) {
-            webSocketServer.addEventListener('message', (event) => {
-                if (readableStreamCancel) return;
-                const message = event.data;
-                controller.enqueue(message);
+function 创建可读WebSocket流(WebSocket服务端, 早期数据头, 日志记录) {
+    let 可读流取消 = false;
+    const 流 = new ReadableStream({
+        start(控制器) {
+            WebSocket服务端.addEventListener('message', (事件) => {
+                if (可读流取消) return;
+                const 消息 = 事件.data;
+                控制器.enqueue(消息);
             });
-            webSocketServer.addEventListener('close', () => {
-                safeCloseWebSocket(webSocketServer);
-                if (readableStreamCancel) return;
-                controller.close();
+            WebSocket服务端.addEventListener('close', () => {
+                安全关闭WebSocket(WebSocket服务端);
+                if (可读流取消) return;
+                控制器.close();
             });
-            webSocketServer.addEventListener('error', (err) => {
-                log('webSocketServer has error');
-                controller.error(err);
+            WebSocket服务端.addEventListener('error', (错误) => {
+                日志记录('WebSocket服务端出错');
+                控制器.error(错误);
             });
-            // Early Data processing if needed
         },
-        cancel(reason) {
-            if (readableStreamCancel) return;
-            readableStreamCancel = true;
-            safeCloseWebSocket(webSocketServer);
+        cancel(原因) {
+            if (可读流取消) return;
+            可读流取消 = true;
+            安全关闭WebSocket(WebSocket服务端);
         }
     });
-    return stream;
+    return 流;
 }
 
-function safeCloseWebSocket(socket) {
+function 安全关闭WebSocket(Socket) {
     try {
-        if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CLOSING) {
-            socket.close();
+        if (Socket.readyState === WebSocket.OPEN || Socket.readyState === WebSocket.CLOSING) {
+            Socket.close();
         }
     } catch (e) {
-        console.error('safeCloseWebSocket error', e);
+        console.error('安全关闭WebSocket错误', e);
     }
 }
 
-async function handleTCPOutBound(remoteSocket, vlessVersion, chunk, addressRemote, portRemote, isUDP, config, log) {
-    // This function connects to the target (Google, YouTube, etc.)
-    // It implements the "Acceleration/ProxyIP" logic here.
-
-    async function connect(address, port, isProxy) {
-        // Here we would implement the logic to check 'config.accNodes' (proxyIP)
-        // If config.accNodes has entries, we connect to THAT node instead of 'address'
-        // and wrap the traffic.
-        // For simplicity in this step, we just do direct connect.
-        return globalThis.connect ? globalThis.connect({ hostname: address, port: port }) : null;
+async function 建立TCP连接(远程Socket, Vless版本, 数据块, 远程地址, 远程端口, 是UDP, config, 日志记录) {
+    async function 连接(地址, 端口) {
+        return globalThis.connect ? globalThis.connect({ hostname: 地址, port: 端口 }) : null;
     }
 
-    // In Cloudflare Worker, 'connect' is available for TCP.
-    // We assume this is running in an environment with the 'connect' capability.
-
     try {
-        const tcpSocket = await connect(addressRemote, portRemote);
-        if (!tcpSocket) {
-            // Fallback or Error
+        const TCP连接Socket = await 连接(远程地址, 远程端口);
+        if (!TCP连接Socket) {
             return;
         }
-
-        // Pipe logic...
-        remoteSocketWrite(tcpSocket, chunk); // Write initial chunk
-
-        // Pipe remote -> ws
-        // ... implementation of piping
-
-        // Need to write response header back to WS if it's VLESS
-        // new Uint8Array([vlessVersion[0], 0])
-
+        写入远程Socket(TCP连接Socket, 数据块);
     } catch (e) {
-        log('connect error', e);
+        日志记录('连接错误', e);
     }
 }
 
-function remoteSocketWrite(tcpSocket, chunk) {
-    const writer = tcpSocket.writable.getWriter();
-    writer.write(chunk);
-    writer.releaseLock();
+function 写入远程Socket(TCP连接Socket, 数据块) {
+    const 写入器 = TCP连接Socket.writable.getWriter();
+    写入器.write(数据块);
+    写入器.releaseLock();
 }
+
+export { 核心服务请求处理 as handleCoreServiceRequest };

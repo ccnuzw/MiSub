@@ -7,16 +7,14 @@
     "dev": "vite",
     "dev:server": "npx wrangler pages dev public --port 8787",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
-    "build": "npm run build:obfuscated",
-    "build:plain": "vite build",
+    "build": "vite build",
     "preview": "vite preview",
     "check-pwa": "node check-pwa.js",
     "build-pwa": "vite build && echo PWA build completed!",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:chrome": "node test-chrome-mcp.js",
-    "build:obfuscated": "vite build && node scripts/build-obfuscated.js"
+    "test:chrome": "node test-chrome-mcp.js"
   },
   "dependencies": {
     "clsx": "^2.1.1",
