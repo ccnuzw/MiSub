@@ -1,31 +1,31 @@
-// Core Service Module (CMEDT Integration)
-// Handles "Nuclear" Proxying, Camouflage, and Advanced Networking
+// 核心服务模块 (CMEDT 集成)
+// 处理 "核" 代理、伪装和高级网络
 
-// Helper to read settings safely
-async function 获取配置(env) {
-    // Fallback defaults
+// 辅助函数：安全读取配置
+async function 获取配置(环境) {
+    // 回退默认值
     const 默认配置 = {
-        uuid: env.sys_c_key || '00000000-0000-4000-8000-000000000000',
-        path: env.sys_c_path || '/?ed=2048',
-        accNodes: env.sys_c_acc ? env.sys_c_acc.split('\n') : [],
-        relay: env.sys_c_relay || '',
-        camouflageMode: env.sys_c_mode || 'nginx',
-        customHtml: env.sys_c_html || '',
-        redirectUrl: env.sys_c_redirect_url || '',
-        tlsFrag: env.sys_c_tls_frag || '',
-        skipCert: env.sys_c_no_cert === true || env.sys_c_no_cert === 'true',
-        enable0rtt: env.sys_c_0rtt === true || env.sys_c_0rtt === 'true',
-        proxyMode: env.sys_c_proxy_mode || 'auto',
-        ipMode: env.sys_c_ip_mode || 'local_random',
-        sys_c_ip_list: env.sys_c_ip_list || '',
-        ipCount: parseInt(env.sys_c_ip_count) || 16,
-        ipPort: parseInt(env.sys_c_ip_port) || -1,
+        uuid: 环境.sys_c_key || '00000000-0000-4000-8000-000000000000',
+        path: 环境.sys_c_path || '/?ed=2048',
+        accNodes: 环境.sys_c_acc ? 环境.sys_c_acc.split('\n') : [],
+        relay: 环境.sys_c_relay || '',
+        camouflageMode: 环境.sys_c_mode || 'nginx',
+        customHtml: 环境.sys_c_html || '',
+        redirectUrl: 环境.sys_c_redirect_url || '',
+        tlsFrag: 环境.sys_c_tls_frag || '',
+        skipCert: 环境.sys_c_no_cert === true || 环境.sys_c_no_cert === 'true',
+        enable0rtt: 环境.sys_c_0rtt === true || 环境.sys_c_0rtt === 'true',
+        proxyMode: 环境.sys_c_proxy_mode || 'auto',
+        ipMode: 环境.sys_c_ip_mode || 'local_random',
+        sys_c_ip_list: 环境.sys_c_ip_list || '',
+        ipCount: parseInt(环境.sys_c_ip_count) || 16,
+        ipPort: parseInt(环境.sys_c_ip_port) || -1,
         enabled: true
     };
 
     try {
-        if (env.MISUB_KV) {
-            const 设置字符串 = await env.MISUB_KV.get('worker_settings_v1');
+        if (环境.MISUB_KV) {
+            const 设置字符串 = await 环境.MISUB_KV.get('worker_settings_v1');
             if (设置字符串) {
                 const 设置对象 = JSON.parse(设置字符串);
                 if (设置对象.disguise && 设置对象.disguise.enabled) {
@@ -44,36 +44,36 @@ async function 获取配置(env) {
     return 默认配置;
 }
 
-async function 核心服务请求处理(context) {
-    const { request, env } = context;
-    const url = new URL(request.url);
+async function 核心服务请求处理(上下文) {
+    const { request: 请求, env: 环境 } = 上下文;
+    const URL对象 = new URL(请求.url);
 
     const 是系统路径 =
-        url.pathname.startsWith('/api/') ||
-        url.pathname.startsWith('/assets/') ||
-        url.pathname.startsWith('/sub/') ||
-        url.pathname === '/sub' ||
-        url.pathname.startsWith('/link/') ||
-        url.pathname === '/link' ||
-        url.pathname.startsWith('/@vite/') ||
-        url.pathname.startsWith('/src/') ||
-        url.pathname === '/favicon.ico' ||
-        ['/login', '/dashboard', '/settings', '/groups', '/nodes', '/subscriptions', '/profile'].some(p => url.pathname === p || url.pathname.startsWith(p + '/'));
+        URL对象.pathname.startsWith('/api/') ||
+        URL对象.pathname.startsWith('/assets/') ||
+        URL对象.pathname.startsWith('/sub/') ||
+        URL对象.pathname === '/sub' ||
+        URL对象.pathname.startsWith('/link/') ||
+        URL对象.pathname === '/link' ||
+        URL对象.pathname.startsWith('/@vite/') ||
+        URL对象.pathname.startsWith('/src/') ||
+        URL对象.pathname === '/favicon.ico' ||
+        ['/login', '/dashboard', '/settings', '/groups', '/nodes', '/subscriptions', '/profile'].some(p => URL对象.pathname === p || URL对象.pathname.startsWith(p + '/'));
 
-    const 含有认证参数 = url.searchParams.has('token') ||
-        url.searchParams.has('key') ||
-        url.searchParams.has('code') ||
-        url.searchParams.has('id');
+    const 含有认证参数 = URL对象.searchParams.has('token') ||
+        URL对象.searchParams.has('key') ||
+        URL对象.searchParams.has('code') ||
+        URL对象.searchParams.has('id');
 
     let 是自定义Token = false;
     try {
-        if (env.MISUB_KV && !是系统路径 && !含有认证参数) {
+        if (环境.MISUB_KV && !是系统路径 && !含有认证参数) {
             const [设置字符串, 配置文件字符串] = await Promise.all([
-                env.MISUB_KV.get('worker_settings_v1'),
-                env.MISUB_KV.get('misub_profiles_v1')
+                环境.MISUB_KV.get('worker_settings_v1'),
+                环境.MISUB_KV.get('misub_profiles_v1')
             ]);
 
-            const 路径片段 = url.pathname.split('/').filter(Boolean);
+            const 路径片段 = URL对象.pathname.split('/').filter(Boolean);
             const 第一片段 = 路径片段[0];
 
             if (第一片段) {
@@ -93,26 +93,26 @@ async function 核心服务请求处理(context) {
         }
     } catch (e) { }
 
-    if (是系统路径 || 含有认证参数 || 是自定义Token || (url.pathname === '/' && !env.sys_c_force_hide)) {
+    if (是系统路径 || 含有认证参数 || 是自定义Token || (URL对象.pathname === '/' && !环境.sys_c_force_hide)) {
         return null;
     }
 
-    const 配置 = await 获取配置(env);
+    const 配置 = await 获取配置(环境);
     const 目标路径 = 配置.path.split('?')[0];
-    const Vless匹配 = url.pathname === 目标路径;
-    const 升级头 = request.headers.get('Upgrade');
+    const Vless匹配 = URL对象.pathname === 目标路径;
+    const 升级头 = 请求.headers.get('Upgrade');
     const 是WebSocket = 升级头 === 'websocket';
 
     if (是WebSocket && Vless匹配) {
-        return 处理Vless请求(request, 配置);
+        return 处理Vless请求(请求, 配置);
     }
 
-    return 处理伪装(配置, url.hostname, request.headers.get('cf-connecting-ip'));
+    return 处理伪装(配置, URL对象.hostname, 请求.headers.get('cf-connecting-ip'));
 }
 
-async function 处理Vless请求(request, config) {
-    const webSocket = new WebSocketPair();
-    const [客户端Socket, 服务端Socket] = Object.values(webSocket);
+async function 处理Vless请求(请求, 配置) {
+    const WebSocket对 = new WebSocketPair();
+    const [客户端Socket, 服务端Socket] = Object.values(WebSocket对);
 
     服务端Socket.accept();
 
@@ -121,7 +121,7 @@ async function 处理Vless请求(request, config) {
     const 日志记录 = (信息, 事件) => {
         console.log(`[${节点地址}:${端口与日志}] ${信息}`, 事件 || '');
     };
-    const 早期数据头 = request.headers.get('sec-websocket-protocol') || '';
+    const 早期数据头 = 请求.headers.get('sec-websocket-protocol') || '';
 
     const 可读WebSocket流 = 创建可读WebSocket流(服务端Socket, 早期数据头, 日志记录);
 
@@ -149,7 +149,7 @@ async function 处理Vless请求(request, config) {
                 原始数据索引,
                 Vless版本 = new Uint8Array([0, 0]),
                 是UDP,
-            } = 解析Vless头部(数据块, config.uuid);
+            } = 解析Vless头部(数据块, 配置.uuid);
 
             节点地址 = 远程地址;
             端口与日志 = `${远程端口}--${Math.random()} ${是UDP ? "udp " : "tcp "}`;
@@ -161,7 +161,7 @@ async function 处理Vless请求(request, config) {
             }
 
             try {
-                建立TCP连接(服务端Socket, Vless版本, 数据块.slice(原始数据索引), 远程地址, 远程端口, 是UDP, config, 日志记录);
+                建立TCP连接(服务端Socket, Vless版本, 数据块.slice(原始数据索引), 远程地址, 远程端口, 是UDP, 配置, 日志记录);
             } catch (错误) {
                 控制器.error(错误);
             }
@@ -247,11 +247,11 @@ function 解析Vless头部(Vless缓冲区, 用户UUID) {
         return { 有错误: true, 消息: '数据无效' };
     }
     const 版本 = new Uint8Array(Vless缓冲区.slice(0, 1));
-    let 是UDP = false;
 
     const 选项长度 = new Uint8Array(Vless缓冲区.slice(17, 18))[0];
     const 命令 = new Uint8Array(Vless缓冲区.slice(18 + 选项长度, 18 + 选项长度 + 1))[0];
 
+    let 是UDP = false;
     if (命令 === 1) { } else if (命令 === 2) {
         是UDP = true;
     } else {
@@ -337,7 +337,7 @@ function 安全关闭WebSocket(Socket) {
     }
 }
 
-async function 建立TCP连接(远程Socket, Vless版本, 数据块, 远程地址, 远程端口, 是UDP, config, 日志记录) {
+async function 建立TCP连接(远程Socket, Vless版本, 数据块, 远程地址, 远程端口, 是UDP, 配置, 日志记录) {
     async function 连接(地址, 端口) {
         return globalThis.connect ? globalThis.connect({ hostname: 地址, port: 端口 }) : null;
     }
