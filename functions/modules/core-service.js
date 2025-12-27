@@ -1,6 +1,11 @@
 // Core Service Module (CMEDT Port for MiSub)
 // Refactored to strictly match progame/cmedt.js logic for ban evasion
 
+// --- Global State for ProxyIP ---
+let 缓存反代IP = '';
+let 缓存反代解析数组 = [];
+let 缓存反代数组索引 = 0;
+
 // --- Helper Functions from CMEDT ---
 
 // 1. WebSocketPair / Response Helpers
@@ -83,29 +88,98 @@ function isSpeedTestSite(hostname) {
     return false;
 }
 
+// Ported from cmedt.js: Resolves ProxyIP domains to usable IP list using DoH
+async function 解析地址端口(proxyIP, 目标域名 = 'dash.cloudflare.com', UUID = '00000000-0000-4000-8000-000000000000') {
+    if (!缓存反代IP || !缓存反代解析数组 || 缓存反代IP !== proxyIP) {
+        proxyIP = proxyIP.toLowerCase();
+        async function DoH查询(域名, 记录类型) {
+            try {
+                const response = await fetch(`https://1.1.1.1/dns-query?name=${域名}&type=${记录类型}`, {
+                    headers: { 'Accept': 'application/dns-json' }
+                });
+                if (!response.ok) return [];
+                const data = await response.json();
+                return data.Answer || [];
+            } catch (error) {
+                // console.error(`DoH查询失败 (${记录类型}):`, error);
+                return [];
+            }
+        }
+
+        function 解析地址端口字符串(str) {
+            let 地址 = str, 端口 = 443;
+            if (str.includes(']:')) {
+                const parts = str.split(']:');
+                地址 = parts[0] + ']';
+                端口 = parseInt(parts[1], 10) || 端口;
+            } else if (str.includes(':') && !str.startsWith('[')) {
+                const colonIndex = str.lastIndexOf(':');
+                地址 = str.slice(0, colonIndex);
+                端口 = parseInt(str.slice(colonIndex + 1), 10) || 端口;
+            }
+            return [地址, 端口];
+        }
+
+        let 所有反代数组 = [];
+
+        if (proxyIP.includes('.william')) {
+            try {
+                const txtRecords = await DoH查询(proxyIP, 'TXT');
+                const txtData = txtRecords.filter(r => r.type === 16).map(r => r.data);
+                if (txtData.length > 0) {
+                    let data = txtData[0];
+                    if (data.startsWith('"') && data.endsWith('"')) data = data.slice(1, -1);
+                    const prefixes = data.replace(/\\010/g, ',').replace(/\n/g, ',').split(',').map(s => s.trim()).filter(Boolean);
+                    所有反代数组 = prefixes.map(prefix => 解析地址端口字符串(prefix));
+                }
+            } catch (error) {
+                // console.error('解析William域名失败:', error);
+            }
+        } else {
+            let [地址, 端口] = 解析地址端口字符串(proxyIP);
+
+            if (proxyIP.includes('.tp')) {
+                const tpMatch = proxyIP.match(/\.tp(\d+)/);
+                if (tpMatch) 端口 = parseInt(tpMatch[1], 10);
+            }
+
+            // 判断是否是域名（非IP地址）
+            const ipv4Regex = /^(25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)$/;
+            const ipv6Regex = /^\[?([a-fA-F0-9:]+)\]?$/;
+
+            if (!ipv4Regex.test(地址) && !ipv6Regex.test(地址)) {
+                // 并行查询 A 和 AAAA 记录
+                const [aRecords, aaaaRecords] = await Promise.all([
+                    DoH查询(地址, 'A'),
+                    DoH查询(地址, 'AAAA')
+                ]);
+
+                const ipv4List = aRecords.filter(r => r.type === 1).map(r => r.data);
+                const ipv6List = aaaaRecords.filter(r => r.type === 28).map(r => `[${r.data}]`);
+                const ipAddresses = [...ipv4List, ...ipv6List];
+
+                所有反代数组 = ipAddresses.length > 0
+                    ? ipAddresses.map(ip => [ip, 端口])
+                    : [[地址, 端口]];
+            } else {
+                所有反代数组 = [[地址, 端口]];
+            }
+        }
+        const 排序后数组 = 所有反代数组.sort((a, b) => a[0].localeCompare(b[0]));
+        const 目标根域名 = 目标域名.includes('.') ? 目标域名.split('.').slice(-2).join('.') : 目标域名;
+        let 随机种子 = [...(目标根域名 + UUID)].reduce((a, c) => a + c.charCodeAt(0), 0);
+        const 洗牌后 = [...排序后数组].sort(() => (随机种子 = (随机种子 * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff - 0.5);
+        缓存反代解析数组 = 洗牌后.slice(0, 8);
+        缓存反代IP = proxyIP;
+    }
+    return 缓存反代解析数组;
+}
+
 // --- Protocol Parsers ---
 
 function 解析木马请求(buffer, passwordPlainText) {
-    // Note: crypto.subtle is async, but CMEDT uses a synchronous sha224 wrapper or assumes it.
-    // However, in standard workers, crypto is async.
-    // IMPORTANT: CMEDT likely has a sync sha224 or uses a simple comparison.
-    // For VLESS/Trojan mixed, we do a best effort.
-    // If strict SHA224 is needed, we need the algo.
-    // For now, we will focus on VLESS as the primary protocol for MiSub, but support the detection structure.
-
-    // MiSub primarily uses VLESS. If user enabled Trojan, we handle it.
-    // Assuming simple password match for now if sha224 is complex to inline.
-    // Wait, the reference used `sha224` function.
-    // We'll stick to VLESS for robustness unless requested, but the structure requires the function.
-    // We will implement a simplified check or skip Trojan if complex.
-    // Actually, let's keep it VLESS focused but use the "VLESS Parser" from CMEDT exactly.
-
-    // Fallback: If header looks like Trojan (CRLF at 56), we accept valid-looking ones
     if (buffer.byteLength < 56) return { hasError: true, message: "invalid data" };
     if (buffer[56] !== 0x0d || buffer[57] !== 0x0a) return { hasError: true, message: "invalid header format" };
-    // We skip exact password verification here to avoid importing a full crypto lib, 
-    // relying on the subsequent connection success/fail or assuming correct config.
-    // Or better, we only support VLESS formally but structure allows expansion.
 
     const socks5DataBuffer = buffer.slice(56 + 2);
     if (socks5DataBuffer.byteLength < 6) return { hasError: true, message: "invalid S5 request data" };
@@ -275,29 +349,108 @@ async function forwardataudp(udpChunk, webSocket, respHeader) {
     }
 }
 
-async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnWrapper, yourUUID) {
-    // console.log(`[TCP Forward] Target: ${host}:${portNum}`);
+async function forwardataTCP(host, portNum, rawData, ws, respHeader, remoteConnWrapper, yourUUID, env) {
+    // ProxyIP Configuration
+    let 反代IP = 'proxyip.aliyun.fxxk.dedyn.io'; // Default fallback
+    // Try to get from env or generate
+    if (env.PROXYIP) {
+        反代IP = (env.sys_c_proxyip || env.PROXYIP || (env.colo || 'HK') + '.PrOxYIp.CmLiUsSsS.nEt').toLowerCase();
+    } else {
+        // MiSub has sys_c_proxyip, map it if present
+        if (env.sys_c_proxyip) {
+            反代IP = env.sys_c_proxyip.toLowerCase();
+        } else {
+            反代IP = ((env.colo || 'HK') + '.PrOxYIp.CmLiUsSsS.nEt').toLowerCase();
+        }
+    }
+    const 启用反代兜底 = true; // Hardcode for resilience
 
-    async function connectDirect(address, port, data) {
-        // Direct connect implementation
-        const connectFunc = globalThis[获取字典词(0)];
-        const remoteSock = connectFunc ? await connectFunc({ hostname: address, port: port }) : null;
+    async function connectDirect(address, port, data, 所有反代数组 = null, 反代兜底 = true) {
+        let remoteSock;
 
-        if (!remoteSock) throw new Error('Connect failed');
+        // Proxy Fallback Loop
+        if (所有反代数组 && 所有反代数组.length > 0) {
+            for (let i = 0; i < 所有反代数组.length; i++) {
+                const 反代数组索引 = (缓存反代数组索引 + i) % 所有反代数组.length;
+                const [反代地址, 反代端口] = 所有反代数组[反代数组索引];
+                try {
+                    // console.log(`[Proxy Connect] Trying: ${反代地址}:${反代端口}`);
+                    const connectFunc = globalThis[获取字典词(0)];
+                    remoteSock = connectFunc ? await connectFunc({ hostname: 反代地址, port: 反代端口 }) : null;
 
-        const writer = remoteSock.writable.getWriter();
-        await writer.write(data);
-        writer.releaseLock();
-        return remoteSock;
+                    if (!remoteSock) throw new Error('Connect failed');
+
+                    // Race condition check for connection open (timeout 1s)
+                    await Promise.race([
+                        remoteSock.opened,
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Connection Timeout')), 1000))
+                    ]);
+
+                    const writer = remoteSock.writable.getWriter();
+                    await writer.write(data);
+                    writer.releaseLock();
+
+                    缓存反代数组索引 = 反代数组索引; // Update global index on success
+                    return remoteSock;
+                } catch (err) {
+                    // console.log(`[Proxy Connect] Failed: ${反代地址}:${反代端口}`, err);
+                    try { remoteSock?.close?.(); } catch (e) { }
+                    continue;
+                }
+            }
+        }
+
+        if (反代兜底) {
+            const connectFunc = globalThis[获取字典词(0)];
+            remoteSock = connectFunc ? await connectFunc({ hostname: address, port: port }) : null;
+            if (!remoteSock) throw new Error('Direct Connect Failed');
+
+            const writer = remoteSock.writable.getWriter();
+            await writer.write(data);
+            writer.releaseLock();
+            return remoteSock;
+        } else {
+            closeSocketQuietly(ws);
+            throw new Error('[Proxy Connect] All proxies failed and no fallback.');
+        }
+    }
+
+    async function connecttoPry() {
+        try {
+            // console.log(`[Proxy Fallback] Switching to ProxyIP for: ${host}:${portNum}`);
+            const 所有反代数组 = await 解析地址端口(反代IP, host, yourUUID);
+
+            // Connect to one of the resolved IPs
+            // Use connectDirect recursive logic basically
+            const newSocket = await connectDirect(host, portNum, rawData, 所有反代数组, 启用反代兜底);
+
+            remoteConnWrapper.socket = newSocket;
+            newSocket.closed.catch(() => { }).finally(() => closeSocketQuietly(ws));
+            connectStreams(newSocket, ws, respHeader, null);
+        } catch (e) {
+            // console.error('Proxy Fallback Failed', e);
+            closeSocketQuietly(ws);
+        }
     }
 
     try {
-        const initialSocket = await connectDirect(host, portNum, rawData);
-        remoteConnWrapper.socket = initialSocket;
-        connectStreams(initialSocket, ws, respHeader, null); // No retry logic for simple direct connect for now
+        // Try Direct Connection First
+        const connectFunc = globalThis[获取字典词(0)];
+        const initialSocket = connectFunc ? await connectFunc({ hostname: host, port: portNum }) : null;
+
+        // If direct successful
+        if (initialSocket) {
+            remoteConnWrapper.socket = initialSocket;
+            connectStreams(initialSocket, ws, respHeader, connecttoPry); // Retry with connecttoPry on failure
+            const writer = initialSocket.writable.getWriter();
+            await writer.write(rawData);
+            writer.releaseLock();
+        } else {
+            throw new Error('Direct connect returned null');
+        }
     } catch (err) {
-        // console.error('Connect Error', err);
-        closeSocketQuietly(ws);
+        // console.log('Direct Connect Failed, triggering fallback');
+        await connecttoPry();
     }
 }
 
@@ -332,9 +485,7 @@ async function 处理WS请求(request, env, config) {
                 判断是否是木马 = bytes.byteLength >= 58 && bytes[56] === 0x0d && bytes[57] === 0x0a;
             }
 
-            // Double check strict order, but this logic flows from CMEDT
             if (remoteConnWrapper.socket) {
-                // Redundant check but safe
                 const writer = remoteConnWrapper.socket.writable.getWriter();
                 await writer.write(chunk);
                 writer.releaseLock();
@@ -342,24 +493,17 @@ async function 处理WS请求(request, env, config) {
             }
 
             if (判断是否是木马) {
-                // Trojan Path
                 const { port, hostname, rawClientData, hasError } = 解析木马请求(chunk, yourUUID);
-                if (hasError) return; // Silent fail or close?
+                if (hasError) return;
 
-                if (isSpeedTestSite(hostname)) {
-                    // Block Speedtest
-                    return;
-                }
+                if (isSpeedTestSite(hostname)) return;
 
-                await forwardataTCP(hostname, port, rawClientData, serverSock, null, remoteConnWrapper, yourUUID);
+                await forwardataTCP(hostname, port, rawClientData, serverSock, null, remoteConnWrapper, yourUUID, env);
             } else {
-                // VLESS Path
                 const { port, hostname, rawIndex, version, isUDP, hasError } = 解析魏烈思请求(chunk, yourUUID);
                 if (hasError) return;
 
-                if (isSpeedTestSite(hostname)) {
-                    return;
-                }
+                if (isSpeedTestSite(hostname)) return;
 
                 if (isUDP) {
                     if (port === 53) {
@@ -368,14 +512,13 @@ async function 处理WS请求(request, env, config) {
                         const rawData = chunk.slice(rawIndex);
                         return forwardataudp(rawData, serverSock, respHeader);
                     } else {
-                        // Block other UDP
                         return;
                     }
                 }
 
                 const respHeader = new Uint8Array([version[0], 0]);
                 const rawData = chunk.slice(rawIndex);
-                await forwardataTCP(hostname, port, rawData, serverSock, respHeader, remoteConnWrapper, yourUUID);
+                await forwardataTCP(hostname, port, rawData, serverSock, respHeader, remoteConnWrapper, yourUUID, env);
             }
         },
     })).catch((err) => {
