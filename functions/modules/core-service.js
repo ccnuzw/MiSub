@@ -474,7 +474,15 @@ async function 核心服务请求处理(上下文) {
     // System path check
     const 是系统路径 =
         URL对象.pathname.startsWith('/api/') ||
-        ['/login', '/dashboard', '/settings'].some(p => URL对象.pathname === p || URL对象.pathname.startsWith(p + '/'));
+        URL对象.pathname.startsWith('/assets/') ||
+        URL对象.pathname.startsWith('/sub/') ||
+        URL对象.pathname === '/sub' ||
+        URL对象.pathname.startsWith('/link/') ||
+        URL对象.pathname === '/link' ||
+        URL对象.pathname.startsWith('/@vite/') ||
+        URL对象.pathname.startsWith('/src/') ||
+        URL对象.pathname === '/favicon.ico' ||
+        ['/login', '/dashboard', '/settings', '/groups', '/nodes', '/subscriptions', '/profile'].some(p => URL对象.pathname === p || URL对象.pathname.startsWith(p + '/'));
 
     if (是系统路径) return null;
 
