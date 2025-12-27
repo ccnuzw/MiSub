@@ -12,6 +12,7 @@ import ServiceSettings from '../components/settings/sections/ServiceSettings.vue
 import ProcessingSettings from '../components/settings/sections/ProcessingSettings.vue';
 import WebSettings from '../components/settings/sections/WebSettings.vue';
 import SystemSettings from '../components/settings/sections/SystemSettings.vue';
+import SSKBSettings from '../components/settings/sections/SSKBSettings.vue';
 
 const dataStore = useDataStore();
 const { showToast } = useToastStore();
@@ -61,6 +62,7 @@ const currentTabLabel = computed(() => {
         case 'service': return '服务集成';
         case 'pipeline': return '节点处理';
         case 'web': return 'Web访问';
+        case 'sskb': return 'SSKB配置';
         case 'system': return '系统设置';
         default: return '设置';
     }
@@ -96,6 +98,17 @@ const loadSettings = async () => {
         pageType: settings.value.disguise.pageType ?? 'default',
         redirectUrl: settings.value.disguise.redirectUrl ?? ''
       };
+    }
+    // 初始化 SSKB 配置
+    if (settings.value.sskbConfig) {
+      // sskbConfig will be passed to SSKBSettings via props, initialization handled there
+    } else {
+        // Ensure the object exists so child component can write to it
+        settings.value.sskbConfig = {
+            enabled: false,
+            uuid: '',
+            proxyIp: 'kr.william.us.ci'
+        };
     }
     // Ensure storageType has a default
     if (!settings.value.storageType) {
@@ -239,6 +252,7 @@ onMounted(() => {
                 <ServiceSettings v-show="activeTab === 'service'" :settings="settings" />
                 <ProcessingSettings v-show="activeTab === 'pipeline'" :settings="settings" :prefixConfig="prefixConfig" v-model:nodeTransform="nodeTransform" />
                 <WebSettings v-show="activeTab === 'web'" :disguiseConfig="disguiseConfig" />
+                <SSKBSettings v-show="activeTab === 'sskb'" :settings="settings" />
                 <SystemSettings v-show="activeTab === 'system'" :settings="settings" :exportBackup="exportBackup" :importBackup="importBackup" @migrate="handleOpenMigrationModal" />
             </div>
 

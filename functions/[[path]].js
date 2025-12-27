@@ -22,6 +22,7 @@
 import { handleMisubRequest } from './modules/subscription-handler.js';
 import { handleApiRequest } from './modules/api-router.js';
 import { createJsonResponse } from './modules/utils.js';
+import { handleSSKBRequest } from './modules/sskb-service.js';
 
 /**
  * 主要的请求处理函数
@@ -33,6 +34,12 @@ export async function onRequest(context) {
     const url = new URL(request.url);
 
     try {
+        // [新增] SSKB VLESS WebSocket 处理
+        const upgradeHeader = request.headers.get('Upgrade');
+        if (upgradeHeader && upgradeHeader.toLowerCase() === 'websocket') {
+            return await handleSSKBRequest(context);
+        }
+
         // 路由分发
         if (url.pathname.startsWith('/api/')) {
             // API 路由
@@ -124,6 +131,7 @@ export const debugInfo = {
     modules: [
         'utils',
         'auth-middleware',
+        'sskb-service',
         'notifications',
         'subscription',
         'subscription-handler',
