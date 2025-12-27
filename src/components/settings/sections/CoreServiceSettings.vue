@@ -88,7 +88,18 @@ const computedSubLink = computed(() => {
     return `${origin}/link/${token}`;
 });
 
-import { getIPList, testIPsConcurrent, loadLocationsData, detectEnvironment } from '@/utils/scanner';
+import { 获取IP列表, 并发测试IP, 加载位置数据, 检测环境 } from '@/utils/scanner';
+
+
+const checkEnvironment = async () => {
+    isCheckingEnv.value = true;
+    try {
+        const result = await 检测环境();
+        envInfo.value = result;
+    } finally {
+        isCheckingEnv.value = false;
+    }
+};
 
 // State for Online Optimization
 const optimizeState = ref({
@@ -117,7 +128,7 @@ const openOnlineOptModal = async () => {
     optimizeState.value.results = [];
     optimizeState.value.progress = { completed: 0, total: 0, success: 0, fail: 0 };
     
-    const env = await detectEnvironment();
+    const env = await 检测环境();
     optEnv.value.checking = false;
     
     if (env.success) {
@@ -156,10 +167,10 @@ const startOptimize = async () => {
     optimizeState.value.progress = { completed: 0, total: 0, success: 0, fail: 0 };
     
     try {
-        const ips = await getIPList(optimizeState.value.library, optimizeState.value.port);
+        const ips = await 获取IP列表(optimizeState.value.library, optimizeState.value.port);
         optimizeState.value.progress.total = ips.length;
         
-        await testIPsConcurrent(ips, (completed, total, success, fail) => {
+        await 并发测试IP(ips, (completed, total, success, fail) => {
             optimizeState.value.progress = { completed, total, success, fail };
         }, safeConcurrency).then(results => {
              optimizeState.value.results = results.sort((a, b) => a.avgTime - b.avgTime);

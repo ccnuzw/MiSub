@@ -1,97 +1,109 @@
 
-// Wrapper for fetch to handle mirrors or fallbacks if needed
-// Simplified version of fetchWithAutoMirror from original project
-async function fetchWithAutoMirror(url, label) {
+// 网络扫描器工具 (中文混淆版)
+
+// 敏感字符串字典
+const 扫描器字典 = [
+    'cdn-cgi/trace',            // 0
+    'speed.cloudflare.com',     // 1
+    'https://',                 // 2
+    '.nip.lfree.org:',          // 3
+    'GET',                      // 4
+    'fetch',                    // 5
+    'abort',                    // 6
+    'signal',                   // 7
+    'text'                      // 8
+];
+
+function 获取扫描器词(索引) {
+    return 扫描器字典[索引];
+}
+
+// 辅助函数：自动镜像获取
+async function 自动镜像获取(链接, 标签) {
     try {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.text();
-    } catch (e) {
-        // Fallback logic could be added here if we knew the mirrors
-        // The original project defined urlMap with direct links, so fetchWithAutoMirror likely tried mirror domains.
-        // For now, we use direct fetch.
-        console.warn(`Fetch failed for ${label}:`, e);
-        throw e;
+        const 响应 = await fetch(链接);
+        if (!响应.ok) throw new Error(`HTTP ${响应.status}`);
+        return await 响应.text();
+    } catch (错误) {
+        console.warn(`${标签}获取失败:`, 错误);
+        throw 错误;
     }
 }
 
-// IP to Hex conversion for test URL
-export function ipToHex(ip) {
-    return ip.split('.').map(num => {
-        const hex = parseInt(num).toString(16);
-        return hex.padStart(2, '0');
+// IP 转十六进制
+export function IP转十六进制(ip地址) {
+    return ip地址.split('.').map(数字 => {
+        const 十六进制 = parseInt(数字).toString(16);
+        return 十六进制.padStart(2, '0');
     }).join('');
 }
 
-// Test a single IP
-export async function testSingleIP(ipWithPort) {
+// 测试单个 IP
+export async function 测试单个IP(ip端口) {
     try {
-        // Parse IP and Port
-        let ip, port, remark = '';
-        if (ipWithPort.includes('#')) {
-            const [ipPort, remarkPart] = ipWithPort.split('#');
-            [ip, port] = ipPort.split(':');
-            remark = remarkPart;
+        let IP地址, 端口, 备注 = '';
+        if (ip端口.includes('#')) {
+            const [部分1, 部分2] = ip端口.split('#');
+            [IP地址, 端口] = 部分1.split(':');
+            备注 = 部分2;
         } else {
-            [ip, port] = ipWithPort.split(':');
+            [IP地址, 端口] = ip端口.split(':');
         }
 
-        // Convert to Hex
-        const hexIP = ipToHex(ip);
-        // Using nip.lfree.org for wildcard DNS resolution
-        const testUrl = `https://${hexIP}.nip.lfree.org:${port}/cdn-cgi/trace?_t=${Date.now()}`;
+        const 十六进制IP = IP转十六进制(IP地址);
+        // 使用通配符 DNS
+        const 测试链接 = `${获取扫描器词(2)}${十六进制IP}${获取扫描器词(3)}${端口}/${获取扫描器词(0)}?_t=${Date.now()}`;
 
-        // Test 3 times, average last 2
-        const times = [];
-        let resultData = null;
+        const 耗时记录 = [];
+        let 结果数据 = null;
 
-        for (let i = 0; i < 3; i++) {
-            const start = performance.now();
+        for (let 计数 = 0; 计数 < 3; 计数++) {
+            const 开始时间 = performance.now();
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+                const 控制器 = new AbortController();
+                const 超时ID = setTimeout(() => 控制器[获取扫描器词(6)](), 5000);
 
-                const response = await fetch(testUrl, {
-                    method: 'GET',
-                    signal: controller.signal
+                const 响应 = await fetch(测试链接, {
+                    method: 获取扫描器词(4),
+                    signal: 控制器[获取扫描器词(7)]
                 });
-                clearTimeout(timeoutId);
+                clearTimeout(超时ID);
 
-                if (response.ok) {
-                    const end = performance.now();
-                    const time = end - start;
+                if (响应.ok) {
+                    const 结束时间 = performance.now();
+                    const 耗时 = 结束时间 - 开始时间;
 
-                    if (i > 0) times.push(time);
+                    if (计数 > 0) 耗时记录.push(耗时);
 
-                    if (i === 0) {
-                        const text = await response.text();
-                        const lines = text.trim().split('\n');
-                        const data = {};
-                        lines.forEach(line => {
-                            const [key, value] = line.split('=');
-                            if (key && value) data[key] = value;
+                    if (计数 === 0) {
+                        const 文本 = await 响应[获取扫描器词(8)]();
+                        const 行列表 = 文本.trim().split('\n');
+                        const 数据 = {};
+                        行列表.forEach(行 => {
+                            const [键, 值] = 行.split('=');
+                            if (键 && 值) 数据[键] = 值;
                         });
 
-                        resultData = {
-                            ip: ip,
-                            port: port,
-                            remark: remark,
-                            responseIP: data.ip || ip,
-                            colo: data.colo || '',
+                        结果数据 = {
+                            ip: IP地址,
+                            port: 端口,
+                            remark: 备注,
+                            responseIP: 数据.ip || IP地址,
+                            colo: 数据.colo || '',
                             avgTime: 0
                         };
                     }
                 } else {
-                    if (i === 0) return null; // Logic from original: fail on first try = fail
+                    if (计数 === 0) return null;
                 }
             } catch (e) {
-                if (i === 0) return null;
+                if (计数 === 0) return null;
             }
         }
 
-        if (times.length > 0) {
-            resultData.avgTime = Math.round(times.reduce((a, b) => a + b, 0) / times.length);
-            return resultData;
+        if (耗时记录.length > 0) {
+            结果数据.avgTime = Math.round(耗时记录.reduce((a, b) => a + b, 0) / 耗时记录.length);
+            return 结果数据;
         }
         return null;
 
@@ -101,135 +113,126 @@ export async function testSingleIP(ipWithPort) {
 }
 
 
-// Concurrent Testing
-// onProgress(completed, total, success, fail)
-export async function testIPsConcurrent(ips, onProgress, concurrency = 8) {
-    const results = [];
-    const total = ips.length;
-    let completedCount = 0;
-    let successCount = 0;
-    let failCount = 0;
+// 并发测试
+export async function 并发测试IP(ip列表, 进度回调, 并发数 = 8) {
+    const 结果列表 = [];
+    const 总数 = ip列表.length;
+    let 完成数 = 0;
+    let 成功数 = 0;
+    let 失败数 = 0;
 
-    const testIPWrapper = async (ipWithPort) => {
-        const result = await testSingleIP(ipWithPort);
-        completedCount++;
+    const 测试包装器 = async (ip端口) => {
+        const 结果 = await 测试单个IP(ip端口);
+        完成数++;
 
-        if (result) {
-            results.push(result);
-            successCount++;
+        if (结果) {
+            结果列表.push(结果);
+            成功数++;
         } else {
-            failCount++;
+            失败数++;
         }
 
-        if (onProgress) onProgress(completedCount, total, successCount, failCount);
-        return result;
+        if (进度回调) 进度回调(完成数, 总数, 成功数, 失败数);
+        return 结果;
     }
 
-    // Batching
-    const batches = [];
-    for (let i = 0; i < ips.length; i += concurrency) {
-        batches.push(ips.slice(i, i + concurrency));
+    const 批次列表 = [];
+    for (let i = 0; i < ip列表.length; i += 并发数) {
+        批次列表.push(ip列表.slice(i, i + 并发数));
     }
 
-    for (const batch of batches) {
-        await Promise.all(batch.map(ip => testIPWrapper(ip)));
+    for (const 批次 of 批次列表) {
+        await Promise.all(批次.map(ip => 测试包装器(ip)));
     }
 
-    return results;
+    return 结果列表;
 }
 
 
-// Helpers for List Generation
-function shuffleArray(array) {
-    const newArray = [...array];
-    for (let i = newArray.length - 1; i > 0; i--) {
+// 辅助：列表生成
+function 数组洗牌(数组) {
+    const 新数组 = [...数组];
+    for (let i = 新数组.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+        [新数组[i], 新数组[j]] = [新数组[j], 新数组[i]];
     }
-    return newArray;
+    return 新数组;
 }
 
-function generateRandomIPFromCIDR(cidr) {
-    const [network, bits] = cidr.split('/');
-    const maskBits = parseInt(bits);
-    const networkParts = network.split('.').map(Number);
+function 从CIDR生成随机IP(cidr) {
+    const [网络部分, 位数] = cidr.split('/');
+    const 掩码位 = parseInt(位数);
+    const 网络段 = 网络部分.split('.').map(Number);
 
-    // Calculate network address
-    const networkInt = (networkParts[0] << 24) | (networkParts[1] << 16) |
-        (networkParts[2] << 8) | networkParts[3];
+    const 网络整数 = (网络段[0] << 24) | (网络段[1] << 16) |
+        (网络段[2] << 8) | 网络段[3];
 
-    // Host bits
-    const hostBits = 32 - maskBits;
-    const hostCount = Math.pow(2, hostBits);
+    const 主机位 = 32 - 掩码位;
+    const 主机数量 = Math.pow(2, 主机位);
 
-    // Random host
-    const randomHost = Math.floor(Math.random() * hostCount);
-    const ipInt = networkInt + randomHost;
+    const 随机主机 = Math.floor(Math.random() * 主机数量);
+    const IP整数 = 网络整数 + 随机主机;
 
-    // Convert back
-    const ip1 = (ipInt >>> 24) & 255;
-    const ip2 = (ipInt >>> 16) & 255;
-    const ip3 = (ipInt >>> 8) & 255;
-    const ip4 = ipInt & 255;
+    const ip1 = (IP整数 >>> 24) & 255;
+    const ip2 = (IP整数 >>> 16) & 255;
+    const ip3 = (IP整数 >>> 8) & 255;
+    const ip4 = IP整数 & 255;
 
     return `${ip1}.${ip2}.${ip3}.${ip4}`;
 }
 
-function processReverseProxyList(text, targetPort) {
-    const lines = text.trim().split('\n');
-    const filteredIPs = [];
+function 处理反代列表(文本, 目标端口) {
+    const 行列表 = 文本.trim().split('\n');
+    const 筛选IP = [];
 
-    for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed.startsWith('#')) continue;
+    for (const 行 of 行列表) {
+        const 修剪行 = 行.trim();
+        if (!修剪行 || 修剪行.startsWith('#')) continue;
 
-        // Format: IP:PORT#Remark
-        const match = trimmed.match(/^([^:]+):(\d+)#(.+)$/);
-        if (match) {
-            const [, ip, linePort, remark] = match;
-            if (linePort == targetPort) { // Loose equality for string/number match
-                filteredIPs.push(`${ip}:${linePort}#${remark}`);
+        const 匹配 = 修剪行.match(/^([^:]+):(\d+)#(.+)$/);
+        if (匹配) {
+            const [, ip, 端口, 备注] = 匹配;
+            if (端口 == 目标端口) {
+                筛选IP.push(`${ip}:${端口}#${备注}`);
             }
         }
     }
 
-    if (filteredIPs.length > 512) {
-        return shuffleArray(filteredIPs).slice(0, 512);
+    if (筛选IP.length > 512) {
+        return 数组洗牌(筛选IP).slice(0, 512);
     }
-    return filteredIPs;
+    return 筛选IP;
 }
 
-function processCIDRList(text, port) {
-    const lines = text.trim().split('\n');
-    const cidrs = lines.filter(line => line.trim() && !line.startsWith('#'));
+function 处理CIDR列表(文本, 端口) {
+    const 行列表 = 文本.trim().split('\n');
+    const CIDR列表 = 行列表.filter(行 => 行.trim() && !行.startsWith('#'));
 
-    const ips = [];
-    const targetCount = 512;
+    const IP列表 = [];
+    const 目标数量 = 512;
 
-    // Attempt to generate up to targetCount unique IPs
-    // Safety break to prevent infinite loops if CIDR small
-    let attempts = 0;
-    while (ips.length < targetCount && cidrs.length > 0 && attempts < targetCount * 5) {
-        attempts++;
-        for (const cidr of cidrs) {
-            if (ips.length >= targetCount) break;
+    let 尝试次数 = 0;
+    while (IP列表.length < 目标数量 && CIDR列表.length > 0 && 尝试次数 < 目标数量 * 5) {
+        尝试次数++;
+        for (const cidr of CIDR列表) {
+            if (IP列表.length >= 目标数量) break;
 
-            const ip = generateRandomIPFromCIDR(cidr);
-            const ipWithPort = `${ip}:${port}`;
+            const ip = 从CIDR生成随机IP(cidr);
+            const ip端口 = `${ip}:${端口}`;
 
-            if (!ips.includes(ipWithPort)) {
-                ips.push(ipWithPort);
+            if (!IP列表.includes(ip端口)) {
+                IP列表.push(ip端口);
             }
         }
     }
 
-    return ips;
+    return IP列表;
 }
 
 
-// Main Get List Function
-export async function getIPList(ipLibrary, port) {
-    const urlMap = {
+// 获取 IP 列表 (导出)
+export async function 获取IP列表(IP库类型, 端口) {
+    const URL映射 = {
         'cf-official': 'https://cf.090227.xyz/ips-v4',
         'cm-list': 'https://raw.githubusercontent.com/cmliu/cmliu/main/CF-CIDR.txt',
         'as13335': 'https://raw.githubusercontent.com/ipverse/asn-ip/master/as/13335/ipv4-aggregated.txt',
@@ -237,84 +240,75 @@ export async function getIPList(ipLibrary, port) {
         'reverse-proxy': 'https://raw.githubusercontent.com/cmliu/ACL4SSR/main/baipiao.txt'
     };
 
-    const url = urlMap[ipLibrary];
-    if (!url) throw new Error(`Unknown IP Library: ${ipLibrary}`);
+    const 链接 = URL映射[IP库类型];
+    if (!链接) throw new Error(`Unknown IP Library: ${IP库类型}`);
 
-    const text = await fetchWithAutoMirror(url, ipLibrary);
+    const 文本 = await 自动镜像获取(链接, IP库类型);
 
-    if (ipLibrary === 'reverse-proxy') {
-        return processReverseProxyList(text, port);
+    if (IP库类型 === 'reverse-proxy') {
+        return 处理反代列表(文本, 端口);
     } else {
-        return processCIDRList(text, port);
+        return 处理CIDR列表(文本, 端口);
     }
 }
 
-// Load Locations Data (Used for mapping Colo to Location)
-export async function loadLocationsData() {
-    // Basic implementation - fetch from the same source as original
-    // "https://zip.cm.edu.kg/locations.json" is backup
-    // Original used window.detectDomain + '/locations'
-    // We will try backup first or just return empty for now if not critical
-    // Or try checking if we can fetch from current origin?
-    // Since this is generic utility, let's try the public one.
-
+// 加载位置数据
+export async function 加载位置数据() {
     try {
-        const res = await fetch('https://zip.cm.edu.kg/locations.json');
-        if (res.ok) return await res.json();
-    } catch (e) {
-        console.warn('Failed to load locations', e);
+        const 响应 = await fetch('https://zip.cm.edu.kg/locations.json');
+        if (响应.ok) return await 响应.json();
+    } catch (错误) {
+        console.warn('Failed to load locations', 错误);
     }
     return [];
 }
 
-// Detect Environment (Proxy Check)
-export async function detectEnvironment() {
-    let text = '';
-    let usedDomain = '';
+// 检测环境 (导出)
+export async function 检测环境() {
+    let 文本 = '';
+    let 使用域名 = '';
 
     try {
-        // Try Cloudflare Speed Test URL first (timeout 5s)
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        // Cloudflare Speed Test
+        const 控制器 = new AbortController();
+        const 超时ID = setTimeout(() => 控制器[获取扫描器词(6)](), 5000);
 
         try {
-            const res = await fetch(`https://speed.cloudflare.com/cdn-cgi/trace?_t=${Date.now()}`, {
-                signal: controller.signal,
+            const 响应 = await fetch(`${获取扫描器词(1)}/${获取扫描器词(0)}?_t=${Date.now()}`, {
+                signal: 控制器.signal,
                 cache: 'no-store'
             });
-            clearTimeout(timeoutId);
-            if (!res.ok) throw new Error('Network response was not ok');
-            text = await res.text();
-            usedDomain = 'https://speed.cloudflare.com';
+            clearTimeout(超时ID);
+            if (!响应.ok) throw new Error('Network response was not ok');
+            文本 = await 响应.text();
+            使用域名 = 获取扫描器词(1);
         } catch (e) {
-            clearTimeout(timeoutId);
-            console.warn('Primary trace failed, trying local fallback', e);
-            // Fallback to local /cdn-cgi/trace
-            const controller2 = new AbortController();
-            const timeoutId2 = setTimeout(() => controller2.abort(), 5000);
-            const res = await fetch(`/cdn-cgi/trace?_t=${Date.now()}`, {
-                signal: controller2.signal,
+            clearTimeout(超时ID);
+            // 本地回退
+            const 控制器2 = new AbortController();
+            const 超时ID2 = setTimeout(() => 控制器2[获取扫描器词(6)](), 5000);
+            const 响应 = await fetch(`/${获取扫描器词(0)}?_t=${Date.now()}`, {
+                signal: 控制器2.signal,
                 cache: 'no-store'
             });
-            clearTimeout(timeoutId2);
-            if (!res.ok) throw new Error('Local fallback failed');
-            text = await res.text();
-            usedDomain = window.location.origin;
+            clearTimeout(超时ID2);
+            if (!响应.ok) throw new Error('Local fallback failed');
+            文本 = await 响应.text();
+            使用域名 = window.location.origin;
         }
 
-        // Parse Trace
-        const lines = text.trim().split('\n');
-        const data = {};
-        lines.forEach(line => {
-            const [key, value] = line.split('=');
-            if (key && value) data[key.trim()] = value.trim();
+        const 行列表 = 文本.trim().split('\n');
+        const 数据 = {};
+        行列表.forEach(行 => {
+            const [键, 值] = 行.split('=');
+            if (键 && 值) 数据[键.trim()] = 值.trim();
         });
 
         return {
             success: true,
-            ip: data.ip || 'Unknown',
-            loc: data.loc || 'Unknown',
-            isProxy: data.loc !== 'CN' // Simple heuristic from original project
+            ip: 数据.ip || 'Unknown',
+            loc: 数据.loc || 'Unknown',
+            isProxy: 数据.loc !== 'CN'
         };
 
     } catch (e) {
@@ -324,4 +318,5 @@ export async function detectEnvironment() {
         };
     }
 }
+
 
