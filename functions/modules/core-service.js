@@ -50,9 +50,21 @@ async function 获取配置(环境) {
                         默认配置.redirectUrl = 设置对象.disguise.redirectUrl;
                     }
                 }
+                // [Fix] Load all Core Service settings from KV
+                if (设置对象.sys_c_key) 默认配置.uuid = 设置对象.sys_c_key;
+                if (设置对象.sys_c_path) 默认配置.path = 设置对象.sys_c_path;
                 if (设置对象.sys_c_mode) 默认配置.camouflageMode = 设置对象.sys_c_mode;
                 if (设置对象.sys_c_html) 默认配置.customHtml = 设置对象.sys_c_html;
                 if (设置对象.sys_c_redirect_url) 默认配置.redirectUrl = 设置对象.sys_c_redirect_url;
+                if (设置对象.sys_c_relay) 默认配置.relay = 设置对象.sys_c_relay;
+                if (设置对象.sys_c_tls_frag) 默认配置.tlsFrag = 设置对象.sys_c_tls_frag;
+                if (设置对象.sys_c_no_cert !== undefined) 默认配置.skipCert = 设置对象.sys_c_no_cert === true || 设置对象.sys_c_no_cert === 'true';
+                if (设置对象.sys_c_0rtt !== undefined) 默认配置.enable0rtt = 设置对象.sys_c_0rtt === true || 设置对象.sys_c_0rtt === 'true';
+                if (设置对象.sys_c_proxy_mode) 默认配置.proxyMode = 设置对象.sys_c_proxy_mode;
+                if (设置对象.sys_c_ip_mode) 默认配置.ipMode = 设置对象.sys_c_ip_mode;
+                if (设置对象.sys_c_ip_list) 默认配置.sys_c_ip_list = 设置对象.sys_c_ip_list;
+                if (设置对象.sys_c_ip_count) 默认配置.ipCount = parseInt(设置对象.sys_c_ip_count);
+                if (设置对象.sys_c_ip_port) 默认配置.ipPort = parseInt(设置对象.sys_c_ip_port);
             }
         }
     } catch (e) { }
