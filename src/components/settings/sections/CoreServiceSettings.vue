@@ -12,14 +12,14 @@ const props = defineProps({
 
 // Tabs configuration
 const tabs = [
-  { id: 'overlay', name: '伪装设置', icon: 'M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z', safeLabel: 'Site Overlay' },
+  // { id: 'overlay', name: '伪装设置', icon: 'M15 12a3 3 0 11-6 0 3 3 0 016 0z...', safeLabel: 'Site Overlay' }, // Moved to WebSettings
   { id: 'core', name: '核心配置', icon: 'M13 10V3L4 14h7v7l9-11h-7z', safeLabel: 'Service Core' },
   { id: 'network', name: '网络加速', icon: 'M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064', safeLabel: 'Network' },
   { id: 'optimization', name: '优选设置', icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10', safeLabel: 'Preferences' },
   { id: 'preview', name: '配置预览', icon: 'M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z', safeLabel: 'Preview' }
 ];
 
-const currentTab = ref('overlay');
+const currentTab = ref('core');
 const showOnlineOpt = ref(false);
 const showOptApi = ref(false);
 
@@ -83,8 +83,9 @@ const computedNodeLink = computed(() => {
 
 const computedSubLink = computed(() => {
     const host = window.location.hostname;
+    const origin = window.location.origin;
     const token = doubleMD5(host + props.settings.sys_c_key);
-    return `https://${host}/sub?token=${token}`;
+    return `${origin}/link/${token}`;
 });
 
 import { getIPList, testIPsConcurrent, loadLocationsData, detectEnvironment } from '@/utils/scanner';
@@ -137,6 +138,19 @@ const apiState = ref({
 
 
 const startOptimize = async () => {
+    // 1. Environment Guard
+    if (optEnv.value.isProxy || optEnv.value.checking) {
+        alert('请确保在直连环境下进行优选！(Please disable proxy/VPN)');
+        return;
+    }
+
+    if (optimizeState.value.running) return;
+
+    // 2. Concurrency Safety Clamp (Max 32)
+    const rawConcurrency = optimizeState.value.concurrency;
+    const safeConcurrency = Math.min(Math.max(rawConcurrency, 1), 32);
+    optimizeState.value.concurrency = safeConcurrency; // Update UI
+
     optimizeState.value.running = true;
     optimizeState.value.results = [];
     optimizeState.value.progress = { completed: 0, total: 0, success: 0, fail: 0 };
@@ -147,7 +161,7 @@ const startOptimize = async () => {
         
         await testIPsConcurrent(ips, (completed, total, success, fail) => {
             optimizeState.value.progress = { completed, total, success, fail };
-        }, optimizeState.value.concurrency).then(results => {
+        }, safeConcurrency).then(results => {
              optimizeState.value.results = results.sort((a, b) => a.avgTime - b.avgTime);
         });
         
@@ -160,6 +174,7 @@ const startOptimize = async () => {
 
 const saveOptimizeParams = (mode) => { // mode: 'override' or 'append'
     if (optimizeState.value.results.length === 0) return;
+    if (optEnv.value.isProxy) return; // Strict guard on save
     
     // Format: IP:Port#Remark (Top 16)
     const topIPs = optimizeState.value.results.slice(0, 16);
@@ -175,7 +190,13 @@ const saveOptimizeParams = (mode) => { // mode: 'override' or 'append'
 
 
 const verifyAndAddApi = async () => {
+    // 1. Basic Validation
     if (!apiState.value.url) return;
+    if (!apiState.value.url.startsWith('http')) {
+        alert('API URL must start with http:// or https://');
+        return;
+    }
+
     apiState.value.verifying = true;
     
     try {
@@ -731,7 +752,14 @@ const verifyAndAddApi = async () => {
                             </div>
                             <div>
                                <label class="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">并发 (Threads)</label>
-                               <input type="number" v-model.number="optimizeState.concurrency" class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-xs py-1.5 focus:ring-indigo-500 focus:border-indigo-500" placeholder="8">
+                               <input 
+                               type="number" 
+                               v-model.number="optimizeState.concurrency" 
+                               class="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 text-xs py-1.5 focus:ring-indigo-500 focus:border-indigo-500" 
+                               placeholder="8"
+                               min="1"
+                               max="32"
+                               >
                             </div>
                         </div>
                     </div>

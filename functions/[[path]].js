@@ -41,8 +41,8 @@ export async function onRequest(context) {
         if (url.pathname.startsWith('/api/')) {
             // API 路由
             return await handleApiRequest(request, env);
-        } else if (url.pathname.startsWith('/sub/')) {
-            // MiSub 订阅路由
+        } else if (url.pathname === '/sub' || url.pathname.startsWith('/sub/') || url.pathname === '/link' || url.pathname.startsWith('/link/')) {
+            // MiSub Subscription & Core Service Link
             return await handleMisubRequest(context);
         } else if (url.pathname === '/cron') {
             // 定时任务路由 (需要认证)

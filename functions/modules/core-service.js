@@ -20,23 +20,56 @@ async function getSettings(env) {
     // or rely on the `env` being populated by a middleware that loads settings.
 
     // Fallback defaults
-    return {
+    const defaults = {
         uuid: env.sys_c_key || '00000000-0000-4000-8000-000000000000',
         path: env.sys_c_path || '/?ed=2048',
         accNodes: env.sys_c_acc ? env.sys_c_acc.split('\n') : [],
         relay: env.sys_c_relay || '',
         camouflageMode: env.sys_c_mode || 'nginx',
         customHtml: env.sys_c_html || '',
+        redirectUrl: env.sys_c_redirect_url || '', // [New]
         // New Parameters
         tlsFrag: env.sys_c_tls_frag || '',
         skipCert: env.sys_c_no_cert === true || env.sys_c_no_cert === 'true',
         enable0rtt: env.sys_c_0rtt === true || env.sys_c_0rtt === 'true',
         proxyMode: env.sys_c_proxy_mode || 'auto',
         ipMode: env.sys_c_ip_mode || 'local_random',
+        // Support parsing IP list from env or KV
+        sys_c_ip_list: env.sys_c_ip_list || '',
         ipCount: parseInt(env.sys_c_ip_count) || 16,
         ipPort: parseInt(env.sys_c_ip_port) || -1,
         enabled: true
     };
+
+    // [New] Try to merge with Legacy Disguise Settings from KV if available
+    try {
+        if (env.MISUB_KV) {
+            const settingsStr = await env.MISUB_KV.get('worker_settings_v1');
+            if (settingsStr) {
+                const settings = JSON.parse(settingsStr);
+                // If Core Mode is NOT set (or default), but Legacy IS set, use Legacy
+                // Or if user wants to use Legacy settings explicitly
+                if (settings.disguise && settings.disguise.enabled) {
+                    if (settings.disguise.pageType === 'redirect') {
+                        defaults.camouflageMode = 'redirect';
+                        defaults.redirectUrl = settings.disguise.redirectUrl;
+                    }
+                    // If pageType is default/active but sys_c_mod is not customized, we could fallback
+                    // But usually Core Service settings take precedence.
+                }
+
+                // Also merge sys_c_* from KV if stored there (CoreServiceSettings.vue saves there too)
+                // This ensures KV settings override environment variables
+                if (settings.sys_c_mode) defaults.camouflageMode = settings.sys_c_mode;
+                if (settings.sys_c_html) defaults.customHtml = settings.sys_c_html;
+                if (settings.sys_c_redirect_url) defaults.redirectUrl = settings.sys_c_redirect_url;
+            }
+        }
+    } catch (e) {
+        // Ignore
+    }
+
+    return defaults;
 }
 
 export async function handleCoreServiceRequest(context) {
@@ -49,13 +82,67 @@ export async function handleCoreServiceRequest(context) {
         url.pathname.startsWith('/api/') ||
         url.pathname.startsWith('/assets/') ||
         url.pathname.startsWith('/sub/') ||
+        url.pathname === '/sub' ||
+        url.pathname.startsWith('/link/') ||
+        url.pathname === '/link' ||
         url.pathname.startsWith('/@vite/') ||
         url.pathname.startsWith('/src/') ||
         url.pathname === '/favicon.ico' ||
         // Essential SPA Routes
         ['/login', '/dashboard', '/settings', '/groups', '/nodes', '/subscriptions', '/profile'].some(p => url.pathname === p || url.pathname.startsWith(p + '/'));
 
-    if (isSystemPath || (url.pathname === '/' && !env.sys_c_force_hide)) {
+    // [Smart Guard] Bypass if URL contains subscription-like query parameters
+    // This prevents camouflage from blocking root-path subscriptions (e.g. /?token=...)
+    const hasAuthParams = url.searchParams.has('token') ||
+        url.searchParams.has('key') ||
+        url.searchParams.has('code') ||
+        url.searchParams.has('id');
+
+    // [Custom Token Guard] Check against 'mytoken' AND 'profiles' in KV
+    // to allow root-path custom subscriptions AND profile subscriptions
+    let isCustomToken = false;
+    try {
+        if (env.MISUB_KV && !isSystemPath && !hasAuthParams) {
+            const [settingsStr, profilesStr] = await Promise.all([
+                env.MISUB_KV.get('worker_settings_v1'),
+                env.MISUB_KV.get('misub_profiles_v1')
+            ]);
+
+            // Normalize path: split into segments
+            const segments = url.pathname.split('/').filter(Boolean);
+            const firstSegment = segments[0];
+
+            if (firstSegment) {
+                // 1. Check Global Token & Profile Token
+                if (settingsStr) {
+                    const settings = JSON.parse(settingsStr);
+
+                    // Allow Admin Token
+                    if (settings.mytoken && settings.mytoken === firstSegment) {
+                        isCustomToken = true;
+                    }
+                    // Allow Profile Access Token (e.g. /profiles/...)
+                    if (settings.profileToken && settings.profileToken === firstSegment) {
+                        isCustomToken = true;
+                    }
+                }
+                // 2. Check Profile IDs (if not already matched)
+                if (!isCustomToken && profilesStr) {
+                    const profiles = JSON.parse(profilesStr);
+                    if (Array.isArray(profiles)) {
+                        const match = profiles.find(p => p.id === firstSegment || p.customId === firstSegment);
+                        if (match) {
+                            isCustomToken = true;
+                        }
+                    }
+                }
+            }
+        }
+    } catch (e) {
+        // Ignore KV errors
+    }
+
+    if (isSystemPath || hasAuthParams || isCustomToken || (url.pathname === '/' && !env.sys_c_force_hide)) {
         return null;
     }
 
@@ -194,6 +281,10 @@ async function handleCamouflage(config, host, ip) {
         return new Response(config.customHtml, {
             headers: { 'Content-Type': 'text/html; charset=utf-8' }
         });
+    }
+
+    if (mode === 'redirect' && config.redirectUrl) {
+        return Response.redirect(config.redirectUrl, 302);
     }
 
     if (mode === '1101') {

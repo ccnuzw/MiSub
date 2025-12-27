@@ -4,7 +4,7 @@
  */
 
 import { StorageFactory } from '../storage-adapter.js';
-import { migrateConfigSettings, formatBytes, getCallbackToken } from './utils.js';
+import { migrateConfigSettings, formatBytes, getCallbackToken, doubleMD5 } from './utils.js';
 import { generateCombinedNodeList } from '../services/subscription-service.js';
 import { sendEnhancedTgNotification } from './notifications.js';
 import { LogService } from '../services/log-service.js';
@@ -45,80 +45,82 @@ export async function handleMisubRequest(context) {
     const isBrowser = /Mozilla|Chrome|Safari|Edge|Opera/i.test(userAgentHeader) &&
         !/clash|v2ray|surge|loon|shadowrocket|quantumult|stash|shadowsocks/i.test(userAgentHeader);
 
-    if (config.disguise?.enabled && isBrowser) {
-        // [Smart Camouflage] Allow Admin Access
-        // Check if the user has a valid admin session cookie
-        const { authMiddleware } = await import('./auth-middleware.js');
-        const isAuthenticated = await authMiddleware(request, env); // Returns boolean
-
-        if (!isAuthenticated) {
-            if (config.disguise.pageType === 'redirect' && config.disguise.redirectUrl) {
-                return Response.redirect(config.disguise.redirectUrl, 302);
-            } else {
-                return renderDisguisePage();
-            }
-        }
-    }
+    // [Camouflage Logic Moved to Core Service]
+    // subscription-handler.js now assumes that if a request reaches here,
+    // it has passed the Core Service Guard (valid token/profile/admin).
+    // The previous browser-check logic is deprecated in favor of the uniform Core Service Guard.
 
     let token = '';
     let profileIdentifier = null;
-    const pathSegments = url.pathname.replace(/^\/sub\//, '/').split('/').filter(Boolean);
+    let isLinkRequest = false;
 
-    if (pathSegments.length > 0) {
-        const firstSegment = pathSegments[0];
-        if (pathSegments.length > 1) {
-            const firstSeg = pathSegments[0];
-            const secondSeg = pathSegments[1];
+    // [New] Handle /link/ vs /sub/ routes
+    if (url.pathname.startsWith('/link')) {
+        isLinkRequest = true;
+        token = url.pathname.replace(/^\/link\/?/, '');
+        // If token explicitly passed in query param, use that (edge case)
+        if (!token) token = url.searchParams.get('token');
+    } else {
+        // [Fix] Correctly handle /sub vs /sub/... paths
+        const cleanPath = url.pathname.replace(/^\/sub\/?/, '');
+        const pathSegments = cleanPath ? cleanPath.split('/').filter(Boolean) : [];
 
-            if (firstSeg === config.profileToken) {
-                // Standard case: /sub/profiles/ID
-                token = firstSeg;
-                profileIdentifier = secondSeg;
-            } else if (firstSeg === config.mytoken) {
-                // Admin token case? Currently not supported for 2 segments but preserving existing var assignment
-                token = firstSeg;
-                profileIdentifier = secondSeg;
-            } else {
-                // Custom/Public case: /folder/profileID OR /profileID/filename
+        if (pathSegments.length > 0) {
+            const firstSegment = pathSegments[0];
+            if (pathSegments.length > 1) {
+                const firstSeg = pathSegments[0];
+                const secondSeg = pathSegments[1];
 
-                // 1. Check if the SECOND segment is a valid profile ID (e.g. /test1/work where work is ID)
-                const foundProfileSecond = allProfiles.find(p => (p.customId && p.customId === secondSeg) || p.id === secondSeg);
-
-                // 2. Check if the FIRST segment is a valid profile ID (e.g. /myprofile/clash where myprofile is ID)
-                const foundProfileFirst = allProfiles.find(p => (p.customId && p.customId === firstSeg) || p.id === firstSeg);
-
-                if (foundProfileSecond) {
-                    // /anything/ID pattern
+                if (firstSeg === config.profileToken) {
+                    // Standard case: /sub/profiles/ID
+                    token = firstSeg;
                     profileIdentifier = secondSeg;
-                    token = config.profileToken;
-                } else if (foundProfileFirst) {
-                    // /ID/anything pattern
-                    profileIdentifier = firstSegment;
-                    token = config.profileToken;
+                } else if (firstSeg === config.mytoken) {
+                    // Admin token case? Currently not supported for 2 segments but preserving existing var assignment
+                    token = firstSeg;
+                    profileIdentifier = secondSeg;
                 } else {
-                    // Fallback to original behavior (likely invalid)
+                    // Custom/Public case: /folder/profileID OR /profileID/filename
+
+                    // 1. Check if the SECOND segment is a valid profile ID (e.g. /test1/work where work is ID)
+                    const foundProfileSecond = allProfiles.find(p => (p.customId && p.customId === secondSeg) || p.id === secondSeg);
+
+                    // 2. Check if the FIRST segment is a valid profile ID (e.g. /myprofile/clash where myprofile is ID)
+                    const foundProfileFirst = allProfiles.find(p => (p.customId && p.customId === firstSeg) || p.id === firstSeg);
+
+                    if (foundProfileSecond) {
+                        // /anything/ID pattern
+                        profileIdentifier = secondSeg;
+                        token = config.profileToken;
+                    } else if (foundProfileFirst) {
+                        // /ID/anything pattern
+                        profileIdentifier = firstSegment;
+                        token = config.profileToken;
+                    } else {
+                        // Fallback to original behavior (likely invalid)
+                        token = firstSegment;
+                        profileIdentifier = secondSeg;
+                    }
+                }
+            } else {
+                // Check if it's the admin token
+                if (firstSegment === config.mytoken) {
                     token = firstSegment;
-                    profileIdentifier = secondSeg;
+                } else {
+                    // Check if it matches a valid profile (Public Access)
+                    const foundProfile = allProfiles.find(p => (p.customId && p.customId === firstSegment) || p.id === firstSegment);
+                    if (foundProfile) {
+                        // It is a profile! Shim the values to satisfy downstream logic
+                        profileIdentifier = firstSegment;
+                        token = config.profileToken;
+                    } else {
+                        token = firstSegment;
+                    }
                 }
             }
         } else {
-            // Check if it's the admin token
-            if (firstSegment === config.mytoken) {
-                token = firstSegment;
-            } else {
-                // Check if it matches a valid profile (Public Access)
-                const foundProfile = allProfiles.find(p => (p.customId && p.customId === firstSegment) || p.id === firstSegment);
-                if (foundProfile) {
-                    // It is a profile! Shim the values to satisfy downstream logic
-                    profileIdentifier = firstSegment;
-                    token = config.profileToken;
-                } else {
-                    token = firstSegment;
-                }
-            }
+            token = url.searchParams.get('token');
         }
-    } else {
-        token = url.searchParams.get('token');
     }
 
     let targetMisubs;
@@ -129,10 +131,113 @@ export async function handleMisubRequest(context) {
 
     const DEFAULT_EXPIRED_NODE = `trojan://00000000-0000-0000-0000-000000000000@127.0.0.1:443#${encodeURIComponent('您的订阅已失效')}`;
 
-    if (profileIdentifier) {
-        // [修正] 使用 config 變量
-        if (!token || token !== config.profileToken) {
-            return new Response('Invalid Profile Token', { status: 403 });
+    if (isLinkRequest) {
+        // [Core Service] Handle /link/ requests separately
+        // Validate against sys_c_key ONLY
+        const validCoreToken = config.sys_c_key ? doubleMD5(url.hostname + config.sys_c_key) : null;
+        const validLocalhostToken = config.sys_c_key ? doubleMD5('localhost' + config.sys_c_key) : null;
+
+        if (!token || (token !== validCoreToken && token !== validLocalhostToken)) {
+            return new Response('Invalid Core Service Token', { status: 403 });
+        }
+
+        // Generate Self-Hosted Node (VLESS/Trojan)
+        // Logic adapted from CoreServiceSettings.vue
+        targetMisubs = [];
+        const host = url.hostname;
+        const uuid = config.sys_c_key;
+        const path = config.sys_c_path || '/?ed=2048';
+        const tlsFrag = config.sys_c_tls_frag ? `&fragment=${encodeURIComponent(config.sys_c_tls_frag === 'Happ' ? '3,1,tlshello' : '1,40-60,30-50,tlshello')}` : '';
+        const allowInsecure = (config.sys_c_no_cert === true || config.sys_c_no_cert === 'true') ? '&allowInsecure=1' : '';
+        const protocol = config.sys_c_protocol || 'vless';
+        const ipMode = config.sys_c_ip_mode || 'local_random';
+
+        // Helper to generate node link
+        const generateLink = (address, port, alias) => {
+            const finalAddress = address || host;
+            const finalPort = port || 443;
+            const finalAlias = alias ? encodeURIComponent(alias) : finalAddress;
+
+            if (protocol.includes('vless')) {
+                return `vless://${uuid}@${finalAddress}:${finalPort}?security=tls&type=ws&host=${host}&sni=${host}&path=${encodeURIComponent(path)}${tlsFrag}&encryption=none${allowInsecure}#${finalAlias}`;
+            } else if (protocol.includes('trojan')) {
+                return `trojan://${uuid}@${finalAddress}:${finalPort}?security=tls&type=ws&host=${host}&sni=${host}&path=${encodeURIComponent(path)}${tlsFrag}&encryption=none${allowInsecure}#${finalAlias}`;
+            }
+            return '';
+        };
+
+        // CIDR Random Generator Helper
+        const generateRandomIP = () => {
+            // Common Cloudflare CIDRs
+            const cidrs = ['104.16.0.0/12', '172.64.0.0/13', '162.158.0.0/15', '198.41.0.0/16', '197.234.240.0/22'];
+            const cidr = cidrs[Math.floor(Math.random() * cidrs.length)];
+            const [network, bits] = cidr.split('/');
+            const maskBits = parseInt(bits);
+            const networkParts = network.split('.').map(Number);
+            const networkInt = (networkParts[0] << 24) | (networkParts[1] << 16) | (networkParts[2] << 8) | networkParts[3];
+            const hostBits = 32 - maskBits;
+            const hostCount = Math.pow(2, hostBits);
+            const randomHost = Math.floor(Math.random() * hostCount);
+            const ipInt = networkInt + randomHost;
+            return `${(ipInt >>> 24) & 255}.${(ipInt >>> 16) & 255}.${(ipInt >>> 8) & 255}.${ipInt & 255}`;
+        };
+
+        // 1. Local KV Mode (User Defined List)
+        if (ipMode === 'local_kv' && config.sys_c_ip_list) {
+            const lines = config.sys_c_ip_list.split('\n');
+            lines.forEach(line => {
+                const cleanLine = line.trim();
+                if (!cleanLine) return;
+                // Format: IP:Port#Tag
+                const [ipPart, tag] = cleanLine.split('#');
+                const [ip, portStr] = ipPart.split(':');
+                if (ip) {
+                    const port = parseInt(portStr) || 443;
+                    const link = generateLink(ip, port, tag || `Opt-${ip}`);
+                    targetMisubs.push({ id: `core-opt-${ip}`, url: link, name: tag || `Opt-${ip}`, enabled: true });
+                }
+            });
+        }
+        else if (ipMode === 'local_random') {
+            // 2. Local Random Mode
+            const count = parseInt(config.sys_c_ip_count) || 16;
+            const targetPort = config.sys_c_ip_port && config.sys_c_ip_port > 0 ? config.sys_c_ip_port : 443;
+            for (let i = 0; i < count; i++) {
+                const ip = generateRandomIP();
+                const link = generateLink(ip, targetPort, `Random-${i + 1}`);
+                targetMisubs.push({ id: `core-rand-${i}`, url: link, name: `Random-${i + 1}`, enabled: true });
+            }
+        }
+
+        // Fallback: If targetMisubs is still empty (e.g. empty list or errors)
+        if (targetMisubs.length === 0) {
+            const link = generateLink(host, 443, 'Core Service Node');
+            targetMisubs.push({ id: 'core-worker-node', url: link, name: 'Core Service Node', enabled: true });
+        }
+
+        subName = 'Core Service';
+        effectiveSubConverter = config.subConverter;
+        effectiveSubConfig = config.subConfig;
+
+    } else if (profileIdentifier) {
+        // [Fix] Allow Core Service Token (doubleMD5)
+        // Also check against 'localhost' to handle Vite proxy scenarios where host is rewritten to 127.0.0.1
+        const validCoreToken = config.sys_c_key ? doubleMD5(url.hostname + config.sys_c_key) : null;
+        const validLocalhostToken = config.sys_c_key ? doubleMD5('localhost' + config.sys_c_key) : null;
+
+        if (!token || (token !== config.profileToken && token !== validCoreToken && token !== validLocalhostToken)) {
+            const debugInfo = {
+                error: 'Invalid Profile Token',
+                receivedToken: token,
+                sys_c_key: config.sys_c_key || 'UNDEFINED',
+                validCoreToken,
+                validLocalhostToken,
+                hostname: url.hostname
+            };
+            return new Response(JSON.stringify(debugInfo, null, 2), {
+                status: 403,
+                headers: { 'Content-Type': 'application/json' }
+            });
         }
         const profile = allProfiles.find(p => (p.customId && p.customId === profileIdentifier) || p.id === profileIdentifier);
         if (profile && profile.enabled) {
@@ -203,9 +308,23 @@ export async function handleMisubRequest(context) {
             return new Response('Profile not found or disabled', { status: 404 });
         }
     } else {
-        // [修正] 使用 config 變量
-        if (!token || token !== config.mytoken) {
-            return new Response('Invalid Token', { status: 403 });
+        // [Correction] Use config variable + Support Core Service Token
+        const validCoreToken = config.sys_c_key ? doubleMD5(url.hostname + config.sys_c_key) : null;
+        const validLocalhostToken = config.sys_c_key ? doubleMD5('localhost' + config.sys_c_key) : null;
+
+        if (!token || (token !== config.mytoken && token !== validCoreToken && token !== validLocalhostToken)) {
+            const debugInfo = {
+                error: 'Invalid Token',
+                receivedToken: token,
+                sys_c_key: config.sys_c_key || 'UNDEFINED',
+                validCoreToken,
+                validLocalhostToken,
+                hostname: url.hostname
+            };
+            return new Response(JSON.stringify(debugInfo, null, 2), {
+                status: 403,
+                headers: { 'Content-Type': 'application/json' }
+            });
         }
         targetMisubs = allMisubs.filter(s => s.enabled);
         // [修正] 使用 config 變量

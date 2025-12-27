@@ -240,7 +240,7 @@ onMounted(() => {
                 <BasicSettings v-show="activeTab === 'basic'" :settings="settings" />
                 <ServiceSettings v-show="activeTab === 'service'" :settings="settings" />
                 <ProcessingSettings v-show="activeTab === 'pipeline'" :settings="settings" :prefixConfig="prefixConfig" v-model:nodeTransform="nodeTransform" />
-                <WebSettings v-show="activeTab === 'web'" :disguiseConfig="disguiseConfig" />
+                <WebSettings v-show="activeTab === 'web'" :settings="settings" />
                 <SystemSettings v-show="activeTab === 'system'" :settings="settings" :exportBackup="exportBackup" :importBackup="importBackup" @migrate="handleOpenMigrationModal" />
                 <CoreServiceSettings v-show="activeTab === 'cmedt'" :settings="settings" />
             </div>
