@@ -115,44 +115,44 @@ async function 核心服务请求处理(上下文) {
 
     const 配置 = await 获取配置(环境);
     const 目标路径 = 配置.path.split('?')[0];
-    const Vless匹配 = URL对象.pathname === 目标路径;
+    const 魏烈思匹配 = URL对象.pathname === 目标路径;
     const 升级头 = 请求.headers.get(获取字典词(2)); // Upgrade
-    const 是WebSocket = 升级头 === 获取字典词(3); // websocket
+    const 是传输通道 = 升级头 === 获取字典词(3); // websocket
 
-    if (是WebSocket && Vless匹配) {
-        return 处理Vless请求(请求, 配置);
+    if (是传输通道 && 魏烈思匹配) {
+        return 处理魏烈思请求(请求, 配置);
     }
 
     return 处理伪装(配置, URL对象.hostname, 请求.headers.get('cf-connecting-ip'));
 }
 
-async function 处理Vless请求(请求, 配置) {
-    const WS构造器 = globalThis[获取字典词(1)] || WebSocketPair; // WebSocketPair
-    const WebSocket对 = new WS构造器();
-    const [客户端Socket, 服务端Socket] = Object.values(WebSocket对);
+async function 处理魏烈思请求(请求, 配置) {
+    const 传输构造器 = globalThis[获取字典词(1)] || WebSocketPair;
+    const 传输对 = new 传输构造器();
+    const [客户端连接, 服务端连接] = Object.values(传输对);
 
-    服务端Socket.accept();
+    服务端连接.accept();
 
     let 节点地址 = '';
     let 端口与日志 = '';
     const 日志记录 = (信息, 事件) => {
-        console.log(`[${节点地址}:${端口与日志}] ${信息}`, 事件 || '');
+        // console.log(`[${节点地址}:${端口与日志}] ${信息}`, 事件 || '');
     };
     const 早期数据头 = 请求.headers.get(获取字典词(4)) || ''; // sec-websocket-protocol
 
-    const 可读WebSocket流 = 创建可读WebSocket流(服务端Socket, 早期数据头, 日志记录);
+    const 可读传输流 = 创建可读传输流(服务端连接, 早期数据头, 日志记录);
 
-    let 远程Socket包装器 = { value: null };
+    let 远程连接包装器 = { value: null };
     let UDP流写入 = null;
 
-    可读WebSocket流.pipeTo(new WritableStream({
+    可读传输流.pipeTo(new WritableStream({
         async write(数据块, 控制器) {
             if (UDP流写入) {
                 return UDP流写入(数据块);
             }
 
-            if (远程Socket包装器.value) {
-                const 写入器 = 远程Socket包装器.value.writable.getWriter();
+            if (远程连接包装器.value) {
+                const 写入器 = 远程连接包装器.value.writable.getWriter();
                 await 写入器.write(数据块);
                 写入器.releaseLock();
                 return;
@@ -164,38 +164,38 @@ async function 处理Vless请求(请求, 配置) {
                 远程端口 = 443,
                 远程地址 = '',
                 原始数据索引,
-                Vless版本 = new Uint8Array([0, 0]),
+                魏烈思版本 = new Uint8Array([0, 0]),
                 是UDP,
-            } = 解析Vless头部(数据块, 配置.uuid);
+            } = 解析魏烈思头部(数据块, 配置.uuid);
 
             节点地址 = 远程地址;
             端口与日志 = `${远程端口}--${Math.random()} ${是UDP ? "udp " : "tcp "}`;
 
             if (有错误) {
-                console.error(消息);
+                // console.error(消息);
                 控制器.error(消息);
                 return;
             }
 
             try {
-                建立TCP连接(服务端Socket, Vless版本, 数据块.slice(原始数据索引), 远程地址, 远程端口, 是UDP, 配置, 日志记录);
+                建立TCP连接(服务端连接, 魏烈思版本, 数据块.slice(原始数据索引), 远程地址, 远程端口, 是UDP, 配置, 日志记录);
             } catch (错误) {
                 控制器.error(错误);
             }
         },
         close() {
-            日志记录(`可读WebSocket流已关闭`);
+            日志记录(`可读传输流已关闭`);
         },
         abort(原因) {
-            日志记录(`可读WebSocket流被中止`, JSON.stringify(原因));
+            日志记录(`可读传输流被中止`, JSON.stringify(原因));
         },
     })).catch((错误) => {
-        日志记录('可读WebSocket流 pipeTo 错误', 错误);
+        日志记录('可读传输流 pipeTo 错误', 错误);
     });
 
     return new Response(null, {
         status: 101,
-        webSocket: 客户端Socket,
+        webSocket: 客户端连接,
     });
 }
 
@@ -259,14 +259,14 @@ function 错误页1101(主机名, IP) {
     });
 }
 
-function 解析Vless头部(Vless缓冲区, 用户UUID) {
-    if (Vless缓冲区.byteLength < 24) {
+function 解析魏烈思头部(魏烈思缓冲区, 用户UUID) {
+    if (魏烈思缓冲区.byteLength < 24) {
         return { 有错误: true, 消息: '数据无效' };
     }
-    const 版本 = new Uint8Array(Vless缓冲区.slice(0, 1));
+    const 版本 = new Uint8Array(魏烈思缓冲区.slice(0, 1));
 
-    const 选项长度 = new Uint8Array(Vless缓冲区.slice(17, 18))[0];
-    const 命令 = new Uint8Array(Vless缓冲区.slice(18 + 选项长度, 18 + 选项长度 + 1))[0];
+    const 选项长度 = new Uint8Array(魏烈思缓冲区.slice(17, 18))[0];
+    const 命令 = new Uint8Array(魏烈思缓冲区.slice(18 + 选项长度, 18 + 选项长度 + 1))[0];
 
     let 是UDP = false;
     if (命令 === 1) { } else if (命令 === 2) {
@@ -276,11 +276,11 @@ function 解析Vless头部(Vless缓冲区, 用户UUID) {
     }
 
     const 端口索引 = 18 + 选项长度 + 1;
-    const 端口缓冲 = Vless缓冲区.slice(端口索引, 端口索引 + 2);
+    const 端口缓冲 = 魏烈思缓冲区.slice(端口索引, 端口索引 + 2);
     const 远程端口 = new DataView(端口缓冲).getUint16(0);
 
     let 地址索引 = 端口索引 + 2;
-    const 地址缓冲 = new Uint8Array(Vless缓冲区.slice(地址索引, 地址索引 + 1));
+    const 地址缓冲 = new Uint8Array(魏烈思缓冲区.slice(地址索引, 地址索引 + 1));
     const 地址类型 = 地址缓冲[0];
 
     let 地址长度 = 0;
@@ -290,16 +290,16 @@ function 解析Vless头部(Vless缓冲区, 用户UUID) {
     switch (地址类型) {
         case 1:
             地址长度 = 4;
-            远程地址 = new Uint8Array(Vless缓冲区.slice(地址值索引, 地址值索引 + 地址长度)).join('.');
+            远程地址 = new Uint8Array(魏烈思缓冲区.slice(地址值索引, 地址值索引 + 地址长度)).join('.');
             break;
         case 2:
-            地址长度 = new Uint8Array(Vless缓冲区.slice(地址值索引, 地址值索引 + 1))[0];
+            地址长度 = new Uint8Array(魏烈思缓冲区.slice(地址值索引, 地址值索引 + 1))[0];
             地址值索引 += 1;
-            远程地址 = new TextDecoder().decode(Vless缓冲区.slice(地址值索引, 地址值索引 + 地址长度));
+            远程地址 = new TextDecoder().decode(魏烈思缓冲区.slice(地址值索引, 地址值索引 + 地址长度));
             break;
         case 3:
             地址长度 = 16;
-            远程地址 = new Uint8Array(Vless缓冲区.slice(地址值索引, 地址值索引 + 地址长度)).reduce((s, b, i, a) => (i % 2 ? s.concat(a.slice(i - 1, i + 1)) : s), []).map(b => new DataView(b.buffer).getUint16(0).toString(16)).join(':');
+            远程地址 = new Uint8Array(魏烈思缓冲区.slice(地址值索引, 地址值索引 + 地址长度)).reduce((s, b, i, a) => (i % 2 ? s.concat(a.slice(i - 1, i + 1)) : s), []).map(b => new DataView(b.buffer).getUint16(0).toString(16)).join(':');
             break;
         default:
             return { 有错误: true, 消息: `地址类型 ${地址类型} 不支持` };
@@ -311,68 +311,68 @@ function 解析Vless头部(Vless缓冲区, 用户UUID) {
         远程端口,
         远程地址,
         原始数据索引,
-        Vless版本: 版本,
+        魏烈思版本: 版本,
         是UDP
     };
 }
 
-function 创建可读WebSocket流(WebSocket服务端, 早期数据头, 日志记录) {
+function 创建可读传输流(传输服务端, 早期数据头, 日志记录) {
     let 可读流取消 = false;
     const 流 = new ReadableStream({
         start(控制器) {
-            WebSocket服务端.addEventListener('message', (事件) => {
+            传输服务端.addEventListener('message', (事件) => {
                 if (可读流取消) return;
                 const 消息 = 事件.data;
                 控制器.enqueue(消息);
             });
-            WebSocket服务端.addEventListener('close', () => {
-                安全关闭WebSocket(WebSocket服务端);
+            传输服务端.addEventListener('close', () => {
+                安全关闭连接(传输服务端);
                 if (可读流取消) return;
                 控制器.close();
             });
-            WebSocket服务端.addEventListener('error', (错误) => {
-                日志记录('WebSocket服务端出错');
+            传输服务端.addEventListener('error', (错误) => {
+                日志记录('传输服务端出错');
                 控制器.error(错误);
             });
         },
         cancel(原因) {
             if (可读流取消) return;
             可读流取消 = true;
-            安全关闭WebSocket(WebSocket服务端);
+            安全关闭连接(传输服务端);
         }
     });
     return 流;
 }
 
-function 安全关闭WebSocket(Socket) {
+function 安全关闭连接(连接) {
     try {
-        if (Socket.readyState === WebSocket.OPEN || Socket.readyState === WebSocket.CLOSING) {
-            Socket.close();
+        if (连接.readyState === WebSocket.OPEN || 连接.readyState === WebSocket.CLOSING) {
+            连接.close();
         }
     } catch (e) {
-        console.error('安全关闭WebSocket错误', e);
+        console.error('安全关闭连接错误', e);
     }
 }
 
-async function 建立TCP连接(远程Socket, Vless版本, 数据块, 远程地址, 远程端口, 是UDP, config, 日志记录) {
+async function 建立TCP连接(远程连接, 魏烈思版本, 数据块, 远程地址, 远程端口, 是UDP, config, 日志记录) {
     async function 连接(地址, 端口) {
         const 连接函数 = globalThis[获取字典词(0)]; // connect
         return 连接函数 ? 连接函数({ hostname: 地址, port: 端口 }) : null;
     }
 
     try {
-        const TCP连接Socket = await 连接(远程地址, 远程端口);
-        if (!TCP连接Socket) {
+        const TCP连接 = await 连接(远程地址, 远程端口);
+        if (!TCP连接) {
             return;
         }
-        写入远程Socket(TCP连接Socket, 数据块);
+        写入远程连接(TCP连接, 数据块);
     } catch (e) {
         日志记录('连接错误', e);
     }
 }
 
-function 写入远程Socket(TCP连接Socket, 数据块) {
-    const 写入器 = TCP连接Socket.writable.getWriter();
+function 写入远程连接(TCP连接, 数据块) {
+    const 写入器 = TCP连接.writable.getWriter();
     写入器.write(数据块);
     写入器.releaseLock();
 }
