@@ -78,37 +78,30 @@ async function obfuscateWorker() {
     const code = await fs.readFile(WORKER_OUT, 'utf-8');
 
     const obfuscationResult = JavaScriptObfuscator.obfuscate(code, {
-        // [Optimization] Reduced obfuscation settings to avoid "Script startup exceeded memory limits"
-        // Previous "High" settings were too aggressive for Cloudflare Workers free/pro tier limits.
+        // [Optimization] "Light" Profile for Cloudflare Workers
+        // Strict CPU/Memory limits require minimal runtime overhead.
+        // We rely on Identifier Renaming (Hexadecimal) which is effective but zero-cost.
+
         compact: true,
-        controlFlowFlattening: false, // Disabled: High performance cost
-        deadCodeInjection: false,     // Disabled: Increases code size/memory significantly
+        controlFlowFlattening: false,
+        deadCodeInjection: false,
         debugProtection: false,
         debugProtectionInterval: 0,
         disableConsoleOutput: true,
         identifierNamesGenerator: 'hexadecimal',
         log: false,
-        numbersToExpressions: false,  // Disabled: Runtime overhead
-        renameGlobals: false,         // Disabled: safer for Worker environment global scope
-        rotateStringArray: true,
-        selfDefending: true,
-        shuffleStringArray: true,
-        simplify: true,
-        splitStrings: false,          // Disabled: Reduces startup string allocation
-        stringArray: true,
-        stringArrayCallsTransform: false, // Disabled: High runtime cost
-        stringArrayEncoding: [],      // Disabled: 'rc4' provides protection but costs memory
-        stringArrayIndexesType: [
-            'hexadecimal-number'
-        ],
-        stringArrayIndexShift: true,
-        stringArrayWrappersCount: 1,
-        stringArrayWrappersChainedCalls: true,
-        stringArrayWrappersParametersMaxCount: 2,
-        stringArrayWrappersType: 'variable',
-        stringArrayThreshold: 0.75,
-        target: 'browser', // Worker environment is browser-like
-        transformObjectKeys: false, // Disabled: safer for JSON/KV interactions
+        numbersToExpressions: false,
+        renameGlobals: false,
+        rotateStringArray: false,
+        selfDefending: false,     // Critical: Disabled to prevent CPU spikes
+        shuffleStringArray: false,
+        simplify: false,           // Critical: Disabled to reduce logic complexity
+        splitStrings: false,
+        stringArray: false,        // Critical: Disabled to avoid string decoding overhead
+        stringArrayCallsTransform: false,
+        stringArrayEncoding: [],
+        target: 'browser',
+        transformObjectKeys: false,
         unicodeEscapeSequence: false
     });
 
